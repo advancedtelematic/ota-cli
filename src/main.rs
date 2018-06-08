@@ -9,12 +9,15 @@ extern crate reqwest;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json as json;
+#[macro_use]
+extern crate serde_json;
 extern crate toml;
+extern crate url;
 extern crate uuid;
 
 mod campaign;
 mod config;
+mod datatypes;
 
 use clap::{AppSettings, ArgMatches};
 use env_logger::Builder;
@@ -29,33 +32,43 @@ use campaign::{Campaign, Manager};
 fn main() -> Result<(), Error> {
     let args = parse_args();
     start_logging(args.value_of("log-level").unwrap_or("INFO"));
+    let remote = args.value_of("remote").unwrap().parse()?;
 
     match args.subcommand() {
         ("create", Some(args)) => {
-            let manager = Manager::new(args.value_of("credentials").unwrap().into());
+            let credentials = args.value_of("credentials").unwrap().into();
+            let manager = Manager::new(remote, credentials);
+
             let campaign_id = match args.value_of("campaign-id") {
                 Some(id) => id.parse()?,
                 None => Uuid::new_v4(),
             };
             let name = args.value_of("name").unwrap();
             let groups: Vec<_> = args.values_of("groups").unwrap().collect();
+
             manager.create(campaign_id, name, groups)?;
         }
 
         ("get", Some(args)) => {
-            let manager = Manager::new(args.value_of("credentials").unwrap().into());
+            let credentials = args.value_of("credentials").unwrap().into();
+            let manager = Manager::new(remote, credentials);
+
             let campaign_id: Uuid = args.value_of("campaign-id").unwrap().parse()?;
             manager.get(campaign_id)?;
         }
 
         ("launch", Some(args)) => {
-            let manager = Manager::new(args.value_of("credentials").unwrap().into());
+            let credentials = args.value_of("credentials").unwrap().into();
+            let manager = Manager::new(remote, credentials);
+
             let campaign_id: Uuid = args.value_of("campaign-id").unwrap().parse()?;
             manager.launch(campaign_id)?;
         }
 
         ("cancel", Some(args)) => {
-            let manager = Manager::new(args.value_of("credentials").unwrap().into());
+            let credentials = args.value_of("credentials").unwrap().into();
+            let manager = Manager::new(remote, credentials);
+
             let campaign_id: Uuid = args.value_of("campaign-id").unwrap().parse()?;
             manager.cancel(campaign_id)?;
         }
@@ -73,7 +86,8 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (setting: AppSettings::VersionlessSubcommands)
         (setting: AppSettings::DeriveDisplayOrder)
 
-        (@arg ("log-level"): -l --("log-level") +takes_value +global "Set the logging level")
+        (@arg remote: -r --remote +takes_value +global "Remote server URL")
+        (@arg ("log-level"): -l --("log-level") +takes_value +global "(optional) Set the logging level")
 
         (@subcommand create =>
             (about: "Create a new campaign")
