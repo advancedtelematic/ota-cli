@@ -2,12 +2,12 @@ use failure::Error;
 use serde::{self, Deserialize, Deserializer};
 use std::str::FromStr;
 
-
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Action {
     Create,
     Launch,
     Get,
+    Stats,
     Cancel,
 }
 
@@ -19,6 +19,7 @@ impl FromStr for Action {
             "create" => Ok(Action::Create),
             "launch" => Ok(Action::Launch),
             "get" => Ok(Action::Get),
+            "stats" => Ok(Action::Stats),
             "cancel" => Ok(Action::Cancel),
             _ => bail!("unknown action: {}", s),
         }
@@ -28,7 +29,6 @@ impl FromStr for Action {
 impl<'de> Deserialize<'de> for Action {
     fn deserialize<D: Deserializer<'de>>(de: D) -> Result<Self, D::Error> {
         let s: String = Deserialize::deserialize(de)?;
-        s.parse()
-            .map_err(|err| serde::de::Error::custom(format!("{}", err)))
+        s.parse().map_err(|err| serde::de::Error::custom(format!("{}", err)))
     }
 }
