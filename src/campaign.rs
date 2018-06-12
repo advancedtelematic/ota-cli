@@ -7,7 +7,7 @@ use uuid::Uuid;
 use datatype::{Token, Url};
 use error::Error;
 
-const API_VERSION: &'static str = "api/v2";
+const API_VERSION: &'static str = "api/v2/campaigns";
 
 pub trait Campaign {
     fn create(&self, campaign_id: Uuid, name: &str, groups: Vec<Uuid>) -> Result<(), Error>;
@@ -46,7 +46,7 @@ impl<'c> Campaign for Manager<'c> {
             campaign_id, name, groups
         );
         let resp: Value = self.client
-            .post(&format!("{}{}/campaigns", self.campaigner, API_VERSION))
+            .post(&format!("{}{}", self.campaigner, API_VERSION))
             .header(self.bearer()?)
             .json(&json!({"name": name, "update": campaign_id, "groups": groups}))
             .send()?
@@ -57,7 +57,7 @@ impl<'c> Campaign for Manager<'c> {
     fn get(&self, campaign_id: Uuid) -> Result<(), Error> {
         debug!("getting campaign with id: {}", campaign_id);
         let resp: Value = self.client
-            .get(&format!("{}{}/campaigns/{}", self.campaigner, API_VERSION, campaign_id))
+            .get(&format!("{}{}/{}", self.campaigner, API_VERSION, campaign_id))
             .header(self.bearer()?)
             .send()?
             .json()?;
@@ -67,10 +67,7 @@ impl<'c> Campaign for Manager<'c> {
     fn launch(&self, campaign_id: Uuid) -> Result<(), Error> {
         debug!("launching campaign with id: {}", campaign_id);
         let resp: Value = self.client
-            .post(&format!(
-                "{}{}/campaigns/{}/launch",
-                self.campaigner, API_VERSION, campaign_id
-            ))
+            .post(&format!("{}{}/{}/launch", self.campaigner, API_VERSION, campaign_id))
             .header(self.bearer()?)
             .send()?
             .json()?;
@@ -80,7 +77,7 @@ impl<'c> Campaign for Manager<'c> {
     fn stats(&self, campaign_id: Uuid) -> Result<(), Error> {
         debug!("getting stats for campaign with id: {}", campaign_id);
         let resp: Value = self.client
-            .get(&format!("{}api/v2/campaigns/{}/stats", self.campaigner, campaign_id))
+            .get(&format!("{}{}/{}/stats", self.campaigner, API_VERSION, campaign_id))
             .header(self.bearer()?)
             .send()?
             .json()?;
@@ -90,10 +87,7 @@ impl<'c> Campaign for Manager<'c> {
     fn cancel(&self, campaign_id: Uuid) -> Result<(), Error> {
         debug!("cancelling campaign with id: {}", campaign_id);
         let resp: Value = self.client
-            .post(&format!(
-                "{}{}/campaigns/{}/cancel",
-                self.campaigner, API_VERSION, campaign_id
-            ))
+            .post(&format!("{}{}/{}/cancel", self.campaigner, API_VERSION, campaign_id))
             .header(self.bearer()?)
             .send()?
             .json()?;
