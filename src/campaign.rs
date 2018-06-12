@@ -1,13 +1,16 @@
-use failure::Error;
-use reqwest::header::{Authorization, Bearer, ContentType, Header};
+use reqwest::header::{Authorization, Bearer, Header};
 use reqwest::Client;
-use serde_json::Value;
+use serde_json::{self, Value};
+use std::io::{self, Write};
 use uuid::Uuid;
 
-use datatype::{AccessToken, Url};
+use datatype::{Token, Url};
+use error::Error;
+
+const API_VERSION: &'static str = "api/v2";
 
 pub trait Campaign {
-    fn create(&self, campaign_id: Uuid, name: &str, groups: Vec<&str>) -> Result<(), Error>;
+    fn create(&self, campaign_id: Uuid, name: &str, groups: Vec<Uuid>) -> Result<(), Error>;
     fn get(&self, campaign_id: Uuid) -> Result<(), Error>;
     fn launch(&self, campaign_id: Uuid) -> Result<(), Error>;
     fn stats(&self, campaign_id: Uuid) -> Result<(), Error>;
@@ -17,76 +20,90 @@ pub trait Campaign {
 pub struct Manager<'c> {
     client: &'c Client,
     campaigner: Url,
-    token: AccessToken,
+    token: Token,
 }
 
 impl<'c> Manager<'c> {
-    pub fn new(client: &'c Client, campaigner: Url, token: AccessToken) -> Self {
-        Manager { client, campaigner, token }
+    pub fn new(client: &'c Client, campaigner: Url, token: Token) -> Self {
+        Manager {
+            client,
+            campaigner,
+            token,
+        }
     }
 
-    fn bearer(&self) -> impl Header {
-        Authorization(Bearer {
-            token: self.token.access_token.clone(),
-        })
+    fn bearer(&self) -> Result<impl Header, Error> {
+        Ok(Authorization(Bearer {
+            token: (self.token)()?.access_token,
+        }))
     }
 }
 
 impl<'c> Campaign for Manager<'c> {
-    fn create(&self, campaign_id: Uuid, name: &str, groups: Vec<&str>) -> Result<(), Error> {
-        debug!("creating campaign - id: {}, name: {}, groups: {:?}", campaign_id, name, groups);
+    fn create(&self, campaign_id: Uuid, name: &str, groups: Vec<Uuid>) -> Result<(), Error> {
+        debug!(
+            "creating campaign with id: {}, name: {}, groups: {:?}",
+            campaign_id, name, groups
+        );
         let resp: Value = self.client
-            .post(&format!("{}/api/v2/campaigns", self.campaigner))
-            .header(self.bearer())
-            .header(ContentType::json())
+            .post(&format!("{}{}/campaigns", self.campaigner, API_VERSION))
+            .header(self.bearer()?)
             .json(&json!({"name": name, "update": campaign_id, "groups": groups}))
             .send()?
             .json()?;
-        debug!("resp: {}", resp);
-        Ok(())
+        print(resp)
     }
 
     fn get(&self, campaign_id: Uuid) -> Result<(), Error> {
-        debug!("getting campaign - id: {}", campaign_id);
+        debug!("getting campaign with id: {}", campaign_id);
         let resp: Value = self.client
-            .get(&format!("{}/api/v2/campaigns/{}", self.campaigner, campaign_id))
-            .header(self.bearer())
+            .get(&format!("{}{}/campaigns/{}", self.campaigner, API_VERSION, campaign_id))
+            .header(self.bearer()?)
             .send()?
             .json()?;
-        debug!("resp: {}", resp);
-        Ok(())
+        print(resp)
     }
 
     fn launch(&self, campaign_id: Uuid) -> Result<(), Error> {
-        debug!("launching campaign - id: {}", campaign_id);
+        debug!("launching campaign with id: {}", campaign_id);
         let resp: Value = self.client
-            .post(&format!("{}/api/v2/campaigns/{}/launch", self.campaigner, campaign_id))
-            .header(self.bearer())
+            .post(&format!(
+                "{}{}/campaigns/{}/launch",
+                self.campaigner, API_VERSION, campaign_id
+            ))
+            .header(self.bearer()?)
             .send()?
             .json()?;
-        debug!("resp: {}", resp);
-        Ok(())
+        print(resp)
     }
 
     fn stats(&self, campaign_id: Uuid) -> Result<(), Error> {
-        debug!("getting stats for campaign - id: {}", campaign_id);
+        debug!("getting stats for campaign with id: {}", campaign_id);
         let resp: Value = self.client
-            .get(&format!("{}/api/v2/campaigns/{}/stats", self.campaigner, campaign_id))
-            .header(self.bearer())
+            .get(&format!("{}api/v2/campaigns/{}/stats", self.campaigner, campaign_id))
+            .header(self.bearer()?)
             .send()?
             .json()?;
-        debug!("resp: {}", resp);
-        Ok(())
+        print(resp)
     }
 
     fn cancel(&self, campaign_id: Uuid) -> Result<(), Error> {
-        debug!("cancelling campaign - id: {}", campaign_id);
+        debug!("cancelling campaign with id: {}", campaign_id);
         let resp: Value = self.client
-            .post(&format!("{}/api/v2/campaigns/{}/cancel", self.campaigner, campaign_id))
-            .header(self.bearer())
+            .post(&format!(
+                "{}{}/campaigns/{}/cancel",
+                self.campaigner, API_VERSION, campaign_id
+            ))
+            .header(self.bearer()?)
             .send()?
             .json()?;
-        debug!("resp: {}", resp);
-        Ok(())
+        print(resp)
     }
+}
+
+fn print(resp: Value) -> Result<(), Error> {
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
+    let _ = handle.write(serde_json::to_string_pretty(&resp)?.as_bytes());
+    Ok(())
 }

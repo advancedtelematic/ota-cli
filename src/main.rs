@@ -2,8 +2,6 @@
 extern crate clap;
 extern crate env_logger;
 #[macro_use]
-extern crate failure;
-#[macro_use]
 extern crate log;
 extern crate reqwest;
 extern crate serde;
@@ -17,66 +15,55 @@ extern crate uuid;
 extern crate zip;
 
 mod campaign;
-mod config;
 mod datatype;
+mod error;
 
 use clap::{AppSettings, ArgMatches};
 use env_logger::Builder;
-use failure::Error;
 use log::LevelFilter;
 use reqwest::Client;
-use std::io::Write;
+use std::{io::Write, path::PathBuf};
 use uuid::Uuid;
 
 use campaign::{Campaign, Manager};
-use datatype::AccessToken;
+use datatype::{AccessToken, Action};
+use error::Error;
 
 fn main() -> Result<(), Error> {
     let args = parse_args();
     start_logging(args.value_of("log-level").unwrap_or("INFO"));
 
+    let (cmd, sub) = args.subcommand();
+    let action = cmd.parse()?;
+    let sub = sub.expect("subcommand matches");
+
     let client = Client::new();
-    let credentials = args.value_of("credentials-zip").unwrap().into();
-    let token = AccessToken::refresh(&client, credentials)?;
+    let clone = client.clone();
+    let credentials: PathBuf = args.value_of("credentials-zip").expect("--credentials-zip").into();
+    let token = Box::new(move || AccessToken::refresh(&clone, &credentials));
 
-    let campaigner = args.value_of("campaigner").unwrap().parse()?;
+    let campaigner = args.value_of("campaigner-url").expect("--campaigner-url").parse()?;
     let manager = Manager::new(&client, campaigner, token);
+    let campaign = |args: &ArgMatches| args.value_of("campaign-id").expect("--campaign-id").parse::<Uuid>();
 
-    match args.subcommand() {
-        ("create", Some(args)) => {
-            let campaign_id = match args.value_of("campaign-id") {
+    match action {
+        Action::Create => {
+            let campaign_id = match sub.value_of("campaign-id") {
                 Some(id) => id.parse()?,
                 None => Uuid::new_v4(),
             };
-            let name = args.value_of("name").unwrap();
-            let groups: Vec<_> = args.values_of("groups").unwrap().collect();
-            manager.create(campaign_id, name, groups)?;
+            let name = sub.value_of("name").expect("--name");
+            let groups = sub.values_of("groups")
+                .expect("--groups")
+                .map(Uuid::parse_str)
+                .collect::<Result<_, _>>()?;
+            manager.create(campaign_id, name, groups)
         }
-
-        ("get", Some(args)) => {
-            let campaign_id: Uuid = args.value_of("campaign-id").unwrap().parse()?;
-            manager.get(campaign_id)?;
-        }
-
-        ("launch", Some(args)) => {
-            let campaign_id: Uuid = args.value_of("campaign-id").unwrap().parse()?;
-            manager.launch(campaign_id)?;
-        }
-
-        ("stats", Some(args)) => {
-            let campaign_id: Uuid = args.value_of("campaign-id").unwrap().parse()?;
-            manager.stats(campaign_id)?;
-        }
-
-        ("cancel", Some(args)) => {
-            let campaign_id: Uuid = args.value_of("campaign-id").unwrap().parse()?;
-            manager.cancel(campaign_id)?;
-        }
-
-        _ => unreachable!(),
+        Action::Get => manager.get(campaign(sub)?),
+        Action::Launch => manager.launch(campaign(sub)?),
+        Action::Stats => manager.stats(campaign(sub)?),
+        Action::Cancel => manager.cancel(campaign(sub)?),
     }
-
-    Ok(())
 }
 
 fn parse_args<'a>() -> ArgMatches<'a> {
@@ -88,7 +75,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (setting: AppSettings::DisableHelpSubcommand)
 
         (@arg ("log-level"): -l --("log-level") +takes_value +global "(optional) Set the logging level")
-        (@arg campaigner: -c --campaigner +takes_value +global "Campaigner URL")
+        (@arg ("campaigner-url"): -c --("campaigner-url") +takes_value +global "Campaigner server")
         (@arg ("credentials-zip"): -z --("credentials-zip") +takes_value +global "Path to credentials.zip")
 
         (@subcommand create =>
@@ -97,7 +84,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
             (setting: AppSettings::DeriveDisplayOrder)
             (@arg ("campaign-id"): -i --("campaign-id") [uuid] "(optional) Specify the campaign ID")
             (@arg name: -n --name <name> "The campaign name")
-            (@arg groups: -g --groups <group> ... "Apply the campaign to the following groups")
+            (@arg groups: -g --groups <uuid> ... "Apply the campaign to the following groups")
         )
 
         (@subcommand get =>
@@ -135,7 +122,7 @@ fn start_logging(level: &str) {
     builder
         .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
         .parse(level);
-    if level != "TRACE" {
+    if level.to_uppercase() != "TRACE" {
         builder.filter(Some("tokio"), LevelFilter::Info);
         builder.filter(Some("hyper"), LevelFilter::Info);
     }
