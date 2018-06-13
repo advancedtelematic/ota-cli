@@ -11,12 +11,15 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate toml;
 extern crate url;
+extern crate url_serde;
 extern crate uuid;
 extern crate zip;
 
-mod campaign;
-mod datatype;
+mod campaigner;
+mod director;
 mod error;
+mod token;
+mod util;
 
 use clap::{AppSettings, ArgMatches};
 use env_logger::Builder;
@@ -25,9 +28,9 @@ use reqwest::Client;
 use std::{io::Write, path::PathBuf};
 use uuid::Uuid;
 
-use campaign::{Campaign, Manager};
-use datatype::{AccessToken, Action};
+use campaigner::{Action, Campaign, Campaigner};
 use error::Error;
+use token::AccessToken;
 
 fn main() -> Result<(), Error> {
     let args = parse_args();
@@ -39,12 +42,12 @@ fn main() -> Result<(), Error> {
 
     let client = Client::new();
     let clone = client.clone();
-    let credentials: PathBuf = args.value_of("credentials-zip").expect("--credentials-zip").into();
-    let token = Box::new(move || AccessToken::refresh(&clone, &credentials));
+    let zip_path: PathBuf = args.value_of("credentials-zip").expect("--credentials-zip").into();
+    let token = Box::new(move || AccessToken::refresh(&clone, &zip_path));
 
-    let campaigner = args.value_of("campaigner-url").expect("--campaigner-url").parse()?;
-    let manager = Manager::new(&client, campaigner, token);
-    let campaign = |args: &ArgMatches| args.value_of("campaign-id").expect("--campaign-id").parse::<Uuid>();
+    let url = args.value_of("campaigner-url").expect("--campaigner-url").parse()?;
+    let campaigner = Campaigner::new(&client, url, token);
+    let campaign_id = |args: &ArgMatches| args.value_of("campaign-id").expect("--campaign-id").parse::<Uuid>();
 
     match action {
         Action::Create => {
@@ -56,13 +59,13 @@ fn main() -> Result<(), Error> {
             let groups = sub.values_of("groups")
                 .expect("--groups")
                 .map(Uuid::parse_str)
-                .collect::<Result<_, _>>()?;
-            manager.create(campaign_id, name, groups)
+                .collect::<Result<Vec<_>, _>>()?;
+            campaigner.create(campaign_id, name, &groups)
         }
-        Action::Get => manager.get(campaign(sub)?),
-        Action::Launch => manager.launch(campaign(sub)?),
-        Action::Stats => manager.stats(campaign(sub)?),
-        Action::Cancel => manager.cancel(campaign(sub)?),
+        Action::Get => campaigner.get(campaign_id(sub)?),
+        Action::Launch => campaigner.launch(campaign_id(sub)?),
+        Action::Stats => campaigner.stats(campaign_id(sub)?),
+        Action::Cancel => campaigner.cancel(campaign_id(sub)?),
     }
 }
 
@@ -75,8 +78,8 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (setting: AppSettings::DisableHelpSubcommand)
 
         (@arg ("log-level"): -l --("log-level") +takes_value +global "(optional) Set the logging level")
-        (@arg ("campaigner-url"): -c --("campaigner-url") +takes_value +global "Campaigner server")
         (@arg ("credentials-zip"): -z --("credentials-zip") +takes_value +global "Path to credentials.zip")
+        (@arg ("campaigner-url"): -c --("campaigner-url") +takes_value +global "Campaigner server")
 
         (@subcommand create =>
             (about: "Create a new campaign")
@@ -85,6 +88,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
             (@arg ("campaign-id"): -i --("campaign-id") [uuid] "(optional) Specify the campaign ID")
             (@arg name: -n --name <name> "The campaign name")
             (@arg groups: -g --groups <uuid> ... "Apply the campaign to the following groups")
+            (@arg ("director-url"): -d --("director-url") <url> "Director server")
         )
 
         (@subcommand get =>
