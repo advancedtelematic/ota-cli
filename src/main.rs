@@ -70,7 +70,7 @@ fn main() -> Result<(), Error> {
 }
 
 fn parse_args<'a>() -> ArgMatches<'a> {
-    clap_app!(("campaign-manager") =>
+    clap_app!(("ota-cli") =>
         (version: crate_version!())
         (setting: AppSettings::SubcommandRequiredElseHelp)
         (setting: AppSettings::VersionlessSubcommands)

@@ -1,11 +1,11 @@
 [package]
-name = "campaign-manager"
+name = "ota-cli"
 version = "0.1.0"
 authors = ["Shaun Taheri <shaun.taheri@here.com>"]
 publish = false
 
 [[bin]]
-name = "campaign"
+name = "ota"
 path = "src/main.rs"
 
 [dependencies]

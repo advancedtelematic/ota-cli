@@ -47,7 +47,7 @@ impl Debug for Error {
 
 impl std::error::Error for Error {
     fn description(&self) -> &str {
-        "campaign-manager error"
+        "ota-cli error"
     }
 }
 

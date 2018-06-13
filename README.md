@@ -1,13 +1,13 @@
-# Campaign Manager
+# OTA command line interface
 
-This repository is for building the command line tool for managing OTA+ campaigns.
+This repository is for managing OTA Connect packages and campaigns from the command line.
 
 To get started, run `make` without any arguments to see a list of available options:
 
 ```
       help : Print this message and exit
-       cli : Build the campaign manager
-    docker : Build the campaign manager using Docker
+       cli : Build the OTA CLI
+    docker : Build the OTA CLI using Docker
      clean : Clean-up all build output
 ```
 
@@ -23,13 +23,13 @@ Run `make docker` to build the CLI using Docker (for an x86 linux target by defa
 
 ## Usage
 
-Run `./campaign` without any arguments to print the following help output:
+Run `./ota` without any arguments to print the following help output:
 
 ```
-campaign-manager 0.1.0
+ota-cli 0.1.0
 
 USAGE:
-    campaign [OPTIONS] <SUBCOMMAND>
+    ota [OPTIONS] <SUBCOMMAND>
 
 FLAGS:
     -h, --help       Prints help information
@@ -69,7 +69,7 @@ OPTIONS:
 
 You can then pass the required arguments to run the actual command:
 
-`./campaign --credentials-zip ~/credentials.zip --campaigner-url http://campaigner.gw.staging.internal.atsgarage.com get --campaign-id 2473e3fe-26fc-4685-a54e-f42d6136a25b`
+`./ota campaign get --credentials-zip ~/credentials.zip --campaigner-url http://campaigner.gw.staging.internal.atsgarage.com --campaign-id 2473e3fe-26fc-4685-a54e-f42d6136a25b`
 
 which will return something like the following output on success:
 
