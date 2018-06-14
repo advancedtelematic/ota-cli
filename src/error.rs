@@ -7,9 +7,15 @@ use url;
 use uuid;
 use zip;
 
+/// Project `Result` type with a fixed error branch.
+pub type Result<T> = std::result::Result<T, Error>;
+
+/// All possible project `Error` types.
 pub enum Error {
-    Action(String),
     Checksum(String),
+    Command(String),
+    CommandCampaign(String),
+    CommandPackage(String),
     Http(reqwest::Error),
     Io(std::io::Error),
     Json(serde_json::Error),
@@ -25,8 +31,10 @@ impl Display for Error {
             f,
             "{}",
             match self {
-                Error::Action(ref err) => format!("Unknown campaign action: {}", err),
                 Error::Checksum(ref err) => format!("Unknown checksum method: {}", err),
+                Error::Command(ref err) => format!("Unknown command: {}", err),
+                Error::CommandCampaign(ref err) => format!("Unknown campaign command: {}", err),
+                Error::CommandPackage(ref err) => format!("Unknown package command: {}", err),
                 Error::Http(ref err) => format!("HTTP: {}", err),
                 Error::Io(ref err) => format!("I/O: {}", err),
                 Error::Json(ref err) => format!("JSON parsing: {}", err),
