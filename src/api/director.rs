@@ -1,13 +1,16 @@
-use reqwest::{header::{Authorization, Bearer, Header},
+use reqwest::{header::{Authorization, Bearer, Headers},
               Client};
 use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
-use std::{self, collections::HashMap, str::FromStr};
+use std::{self,
+          collections::HashMap,
+          fmt::{self, Display, Formatter},
+          str::FromStr};
 use url::Url;
 use uuid::Uuid;
 
 use api::auth_plus::Token;
 use error::{Error, Result};
-use util::print_json;
+use util::print_resp;
 
 /// Available director API methods.
 pub trait Director {
@@ -29,35 +32,38 @@ impl<'c> DirectorHandler<'c> {
         DirectorHandler { client, server, token }
     }
 
-    fn bearer(&self) -> Result<impl Header> {
-        Ok(Authorization(Bearer {
-            token: (self.token)()?.access_token,
-        }))
+    fn auth(&self) -> Result<Headers> {
+        let mut headers = Headers::new();
+        if let Some(resp) = (self.token)()? {
+            headers.set(Authorization(Bearer {
+                token: resp.access_token,
+            }));
+        }
+        Ok(headers)
     }
 }
 
 impl<'c> Director for DirectorHandler<'c> {
     fn create_mtu(&self, targets: &UpdateTargets) -> Result<Uuid> {
         debug!("creating multi-target update: {:?}", targets);
-        let resp: Uuid = self.client
+        Ok(self.client
             .post(&format!("{}api/v1/multi_target_updates", self.server))
             .json(targets)
-            .header(self.bearer()?)
+            .headers(self.auth()?)
             .send()?
-            .json()?;
-        Ok(resp)
+            .json()?)
     }
 
     fn launch_mtu(&self, device_id: Uuid, update_id: Uuid) -> Result<()> {
-        let resp = self.client
+        self.client
             .put(&format!(
                 "{}api/v1/admin/devices/{}/multi_target_update/{}",
                 self.server, device_id, update_id
             ))
-            .header(self.bearer()?)
-            .send()?
-            .json()?;
-        print_json(resp)
+            .headers(self.auth()?)
+            .send()
+            .map_err(Error::Http)
+            .and_then(print_resp)
     }
 }
 
@@ -133,6 +139,28 @@ pub struct Update {
 pub enum TargetFormat {
     Binary,
     Ostree,
+}
+
+impl FromStr for TargetFormat {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_uppercase().as_ref() {
+            "BINARY" => Ok(TargetFormat::Binary),
+            "OSTREE" => Ok(TargetFormat::Ostree),
+            _ => Err(Error::TargetFormat(s.into())),
+        }
+    }
+}
+
+impl Display for TargetFormat {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let text = match self {
+            TargetFormat::Binary => "BINARY",
+            TargetFormat::Ostree => "OSTREE",
+        };
+        write!(f, "{}", text)
+    }
 }
 
 /// The update target for a ECU.

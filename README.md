@@ -29,16 +29,36 @@ Run `./ota` without any arguments to print the following help output:
 ota-cli 0.1.0
 
 USAGE:
-    ota [OPTIONS] <SUBCOMMAND>
+    ota [OPTIONS] --credentials-zip <path> <SUBCOMMAND>
 
 FLAGS:
     -h, --help       Prints help information
     -V, --version    Prints version information
 
 OPTIONS:
-    -l, --log-level <log-level>                (optional) Set the logging level
-    -c, --campaigner-url <campaigner-url>      Campaigner server
-    -z, --credentials-zip <credentials-zip>    Path to credentials.zip
+    -l, --log-level <level>         (optional) Set the logging level
+    -z, --credentials-zip <path>    Path to credentials.zip
+
+SUBCOMMANDS:
+    campaign    Manage OTA campaigns
+    package     Manage OTA packages
+    help        Prints this message or the help of the given subcommand(s)
+```
+
+If you pass a subcommand without any arguments, you will receive additional help output for that command. For example, running `./ota campaign` will return:
+
+```
+ota-campaign
+Manage OTA campaigns
+
+USAGE:
+    ota --credentials-zip <path> campaign --campaigner-url <url> <SUBCOMMAND>
+
+FLAGS:
+    -h, --help    Prints help information
+
+OPTIONS:
+    -c, --campaigner-url <url>    Campaigner server
 
 SUBCOMMANDS:
     create    Create a new campaign
@@ -46,30 +66,12 @@ SUBCOMMANDS:
     launch    Launch a created campaign
     stats     Retrieve stats from a campaign
     cancel    Cancel a launched campaign
-```
-
-If you pass a subcommand without any arguments, you will receive additional help output for that command. For example, running `./campaign get` will return:
-
-```
-campaign-get
-Retrieve campaign information
-
-USAGE:
-    campaign get [OPTIONS] --campaign-id <uuid>
-
-FLAGS:
-    -h, --help    Prints help information
-
-OPTIONS:
-    -i, --campaign-id <uuid>                   The campaign ID
-    -l, --log-level <log-level>                (optional) Set the logging level
-    -c, --campaigner-url <campaigner-url>      Campaigner server
-    -z, --credentials-zip <credentials-zip>    Path to credentials.zip
+    help      Prints this message or the help of the given subcommand(s)
 ```
 
 You can then pass the required arguments to run the actual command:
 
-`./ota campaign get --credentials-zip ~/credentials.zip --campaigner-url http://campaigner.gw.staging.internal.atsgarage.com --campaign-id 2473e3fe-26fc-4685-a54e-f42d6136a25b`
+`./ota --credentials-zip ~/credentials.zip campaign --campaigner-url http://campaigner.gw.staging.internal.atsgarage.com get --campaign-id 2473e3fe-26fc-4685-a54e-f42d6136a25b`
 
 which will return something like the following output on success:
 

@@ -12,6 +12,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// All possible project `Error` types.
 pub enum Error {
+    Auth(String),
     Checksum(String),
     Command(String),
     CommandCampaign(String),
@@ -19,6 +20,7 @@ pub enum Error {
     Http(reqwest::Error),
     Io(std::io::Error),
     Json(serde_json::Error),
+    TargetFormat(String),
     Toml(toml::de::Error),
     Url(url::ParseError),
     Uuid(uuid::ParseError),
@@ -31,13 +33,15 @@ impl Display for Error {
             f,
             "{}",
             match self {
+                Error::Auth(ref err) => format!("Auth error: {}", err),
                 Error::Checksum(ref err) => format!("Unknown checksum method: {}", err),
                 Error::Command(ref err) => format!("Unknown command: {}", err),
-                Error::CommandCampaign(ref err) => format!("Unknown campaign command: {}", err),
-                Error::CommandPackage(ref err) => format!("Unknown package command: {}", err),
+                Error::CommandCampaign(ref err) => format!("Campaign command: {}", err),
+                Error::CommandPackage(ref err) => format!("Package command: {}", err),
                 Error::Http(ref err) => format!("HTTP: {}", err),
                 Error::Io(ref err) => format!("I/O: {}", err),
                 Error::Json(ref err) => format!("JSON parsing: {}", err),
+                Error::TargetFormat(ref err) => format!("Unknown target format: {}", err),
                 Error::Toml(ref err) => format!("TOML parsing: {}", err),
                 Error::Url(ref err) => format!("URL parsing: {}", err),
                 Error::Uuid(ref err) => format!("UUID parsing: {}", err),

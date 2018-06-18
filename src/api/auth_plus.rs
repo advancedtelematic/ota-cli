@@ -5,10 +5,10 @@ use url::Url;
 use url_serde;
 use zip::ZipArchive;
 
-use error::Result;
+use error::{Error, Result};
 
 /// Closure that returns a new `AccessToken`.
-pub type Token = Box<Fn() -> Result<AccessToken>>;
+pub type Token = Box<Fn() -> Result<Option<AccessToken>>>;
 
 /// Access token from Auth+ used to authenticate HTTP requests.
 #[derive(Serialize, Deserialize, Debug)]
@@ -20,23 +20,30 @@ pub struct AccessToken {
 }
 
 impl AccessToken {
-    pub fn refresh(client: &Client, credentials_zip: impl AsRef<Path>) -> Result<AccessToken> {
+    pub fn refresh(client: &Client, credentials_zip: impl AsRef<Path>) -> Result<Option<AccessToken>> {
         let credentials = Credentials::parse(credentials_zip)?;
-        debug!("fetching access token from Auth+ server: {}", credentials.oauth2.server);
-        Ok(client
-            .post(&format!("{}/token", credentials.oauth2.server))
-            .header(ContentType::form_url_encoded())
-            .basic_auth(credentials.oauth2.client_id, Some(credentials.oauth2.client_secret))
-            .body("grant_type=client_credentials")
-            .send()?
-            .json()?)
+        match (credentials.oauth2, credentials.no_auth) {
+            (Some(oauth), _) => {
+                debug!("fetching access token from auth-plus: {}", oauth.server);
+                Ok(Some(client
+                    .post(&format!("{}/token", oauth.server))
+                    .basic_auth(oauth.client_id, Some(oauth.client_secret))
+                    .header(ContentType::form_url_encoded())
+                    .body("grant_type=client_credentials")
+                    .send()?
+                    .json()?))
+            }
+            (None, Some(no_auth)) if no_auth == true => Ok(None),
+            _ => Err(Error::Auth("no parseable auth method from credentials.zip".into())),
+        }
     }
 }
 
 /// Parsed representation of `treehub.json` from `credentials.zip`.
 #[derive(Serialize, Deserialize, Debug)]
 struct Credentials {
-    oauth2: OAuth2,
+    no_auth: Option<bool>,
+    oauth2: Option<OAuth2>,
     ostree: Ostree,
 }
 

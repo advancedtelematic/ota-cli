@@ -12,6 +12,7 @@ extern crate serde_json;
 extern crate toml;
 extern crate url;
 extern crate url_serde;
+extern crate urlencoding;
 extern crate uuid;
 extern crate zip;
 
@@ -27,9 +28,10 @@ use reqwest::Client;
 use std::{io::Write, path::PathBuf};
 use uuid::Uuid;
 
-use api::auth_plus::AccessToken;
-use api::campaigner::{CampaignHandler, Campaigner};
-use api::director::{Director, DirectorHandler};
+use api::{auth_plus::AccessToken,
+          campaigner::{CampaignHandler, Campaigner},
+          director::{Director, DirectorHandler, TargetFormat},
+          reposerver::{RepoTarget, Reposerver, ReposerverHandler}};
 use commands::{Campaign, Command, Package};
 use error::Error;
 
@@ -42,9 +44,9 @@ fn main() -> Result<(), Error> {
     let sub = sub.expect("subcommand matches");
 
     let client = Client::new();
-    let clone = client.clone();
-    let zip_path: PathBuf = args.value_of("credentials-zip").expect("--credentials-zip").into();
-    let token = Box::new(move || AccessToken::refresh(&clone, &zip_path));
+    let zip: PathBuf = args.value_of("credentials-zip").expect("--credentials-zip").into();
+    let (client_clone, zip_clone) = (client.clone(), zip.clone());
+    let token = Box::new(move || AccessToken::refresh(&client_clone, &zip_clone));
 
     match cmd {
         Command::Campaign => {
@@ -81,14 +83,25 @@ fn main() -> Result<(), Error> {
             let cmd = cmd.parse::<Package>()?;
             let sub = sub.expect("package subcommand matches");
 
+            let reposerver = ReposerverHandler::new(&client, zip, token)?;
+
             match cmd {
                 Package::Add => {
-                    let name = sub.value_of("name").expect("--name");
-                    let path = sub.value_of("path").expect("--path");
-                    let version = sub.value_of("version").expect("--version");
-                    let format = sub.value_of("format").expect("--format");
-                    let hardware_ids: Vec<_> = sub.values_of("hardware-ids").expect("--hardware-ids").collect();
-                    unimplemented!()
+                    let name = sub.value_of("name").expect("--name").into();
+                    let version = sub.value_of("version").expect("--version").into();
+                    let format = sub.value_of("format").expect("--format").parse::<TargetFormat>()?;
+                    let hardware_ids: Vec<_> = sub.values_of("hardware-ids")
+                        .expect("--hardware-ids")
+                        .map(String::from)
+                        .collect();
+                    let target = if let Some(path) = sub.value_of("path") {
+                        RepoTarget::Path(path.into())
+                    } else if let Some(url) = sub.value_of("url") {
+                        RepoTarget::Url(url.parse()?)
+                    } else {
+                        return Err(Error::CommandPackage("one of --path or --url needed".into()));
+                    };
+                    reposerver.put_target(name, version, hardware_ids, format, target)
                 }
             }
         }
@@ -103,14 +116,14 @@ fn parse_args<'a>() -> ArgMatches<'a> {
       (setting: AppSettings::InferSubcommands)
       (setting: AppSettings::DeriveDisplayOrder)
 
-      (@arg ("log-level"): -l --("log-level") +takes_value +global "(optional) Set the logging level")
-      (@arg ("credentials-zip"): -z --("credentials-zip") +takes_value +global "Path to credentials.zip")
+      (@arg ("log-level"): -l --("log-level") [level] "(optional) Set the logging level")
+      (@arg ("credentials-zip"): -z --("credentials-zip") <path> "Path to credentials.zip")
 
       (@subcommand campaign =>
         (about: "Manage OTA campaigns")
         (setting: AppSettings::SubcommandRequiredElseHelp)
         (setting: AppSettings::DeriveDisplayOrder)
-        (@arg ("campaigner-url"): -c --("campaigner-url") +takes_value +global "Campaigner server")
+        (@arg ("campaigner-url"): -c --("campaigner-url") <url> "Campaigner server")
 
         (@subcommand create =>
           (about: "Create a new campaign")
@@ -158,9 +171,10 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (setting: AppSettings::DeriveDisplayOrder)
           (@arg name: -n --name <name> "The package name")
           (@arg version: -v --version <version> "The package version")
-          (@arg format: -f --format <format> "Package format (binary or ostree)")
-          (@arg path: -p --path [path] "Path to binary package")
           (@arg ("hardware-ids"): -h --("hardware-ids") <id> ... "Package works on these hardware IDs")
+          (@arg format: -f --format <format> "Package format (binary or ostree)")
+          (@arg path: -p --path [path] "Path to package contents")
+          (@arg url: -u --url [url] "URL to package contents")
         )
       )
     ).get_matches()
