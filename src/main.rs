@@ -50,15 +50,13 @@ fn main() -> Result<(), Error> {
 
     match cmd {
         Command::Campaign => {
-            let (cmd, sub) = sub.subcommand();
-            let cmd = cmd.parse::<Campaign>()?;
-            let sub = sub.expect("campaign subcommand matches");
-
-            let url = args.value_of("campaigner-url").expect("--campaigner-url").parse()?;
+            let url = sub.value_of("campaigner-url").expect("--campaigner-url").parse()?;
             let campaign = CampaignHandler::new(&client, url, token);
-            let id = |args: &ArgMatches| args.value_of("campaign-id").expect("--campaign-id").parse::<Uuid>();
 
-            match cmd {
+            let (cmd, sub) = sub.subcommand();
+            let sub = sub.expect("campaign subcommand matches");
+            let id = |args: &ArgMatches| args.value_of("campaign-id").expect("--campaign-id").parse::<Uuid>();
+            match cmd.parse()? {
                 Campaign::Create => {
                     let campaign_id = match sub.value_of("campaign-id") {
                         Some(id) => id.parse()?,
@@ -79,13 +77,11 @@ fn main() -> Result<(), Error> {
         }
 
         Command::Package => {
-            let (cmd, sub) = sub.subcommand();
-            let cmd = cmd.parse::<Package>()?;
-            let sub = sub.expect("package subcommand matches");
-
             let reposerver = ReposerverHandler::new(&client, zip, token)?;
 
-            match cmd {
+            let (cmd, sub) = sub.subcommand();
+            let sub = sub.expect("package subcommand matches");
+            match cmd.parse()? {
                 Package::Add => {
                     let name = sub.value_of("name").expect("--name").into();
                     let version = sub.value_of("version").expect("--version").into();
@@ -173,8 +169,8 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg version: -v --version <version> "The package version")
           (@arg ("hardware-ids"): -h --("hardware-ids") <id> ... "Package works on these hardware IDs")
           (@arg format: -f --format <format> "Package format (binary or ostree)")
-          (@arg path: -p --path [path] "Path to package contents")
-          (@arg url: -u --url [url] "URL to package contents")
+          (@arg path: -p --path [path] conflicts_with[url] "Path to package contents")
+          (@arg url: -u --url [url] conflicts_with[path] "URL to package contents")
         )
       )
     ).get_matches()
