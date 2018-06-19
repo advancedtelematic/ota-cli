@@ -50,14 +50,18 @@ fn main() -> Result<(), Error> {
 
     match cmd {
         Command::Campaign => {
-            let url = sub.value_of("campaigner-url").expect("--campaigner-url").parse()?;
-            let campaign = CampaignHandler::new(&client, url, token);
+            let campaigner_url = sub.value_of("campaigner-url").expect("--campaigner-url").parse()?;
+            let campaign = CampaignHandler::new(&client, campaigner_url, token.clone());
 
             let (cmd, sub) = sub.subcommand();
             let sub = sub.expect("campaign subcommand matches");
             let id = |args: &ArgMatches| args.value_of("campaign-id").expect("--campaign-id").parse::<Uuid>();
+
             match cmd.parse()? {
                 Campaign::Create => {
+                    let director_url = sub.value_of("director-url").expect("--director-url").parse()?;
+                    let director = DirectorHandler::new(&client, director_url, token);
+
                     let campaign_id = match sub.value_of("campaign-id") {
                         Some(id) => id.parse()?,
                         None => Uuid::new_v4(),
@@ -67,6 +71,7 @@ fn main() -> Result<(), Error> {
                         .expect("--groups")
                         .map(Uuid::parse_str)
                         .collect::<Result<Vec<_>, _>>()?;
+
                     campaign.create(campaign_id, name, &groups)
                 }
                 Campaign::Get => campaign.get(id(sub)?),
@@ -81,6 +86,7 @@ fn main() -> Result<(), Error> {
 
             let (cmd, sub) = sub.subcommand();
             let sub = sub.expect("package subcommand matches");
+
             match cmd.parse()? {
                 Package::Add => {
                     let name = sub.value_of("name").expect("--name").into();

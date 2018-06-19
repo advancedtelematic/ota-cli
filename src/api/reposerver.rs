@@ -78,7 +78,7 @@ impl<'c> Reposerver for ReposerverHandler<'c> {
             .query(&[
                 ("name", urlencoding::encode(&name)),
                 ("version", urlencoding::encode(&version)),
-                ("hardwareIds", urlencoding::encode(&hardware_ids.join(","))),
+                ("hardwareIds", hardware_ids.join(",")),
                 ("targetFormat", format!("{}", target_format)),
             ])
             .multipart(match target {
