@@ -1,0 +1,15 @@
+[[targets]]
+hw_id = "group1"
+target = "abc"
+format = "binary"
+length = 100
+hash = "012345678901234567890123456789012345678901234567890123456789abcd"
+method = "sha256"
+
+[[targets]]
+hw_id = "group2"
+target = "def"
+format = "ostree"
+length = 0
+hash = "abcd012345678901234567890123456789012345678901234567890123456789"
+method = "sha256"

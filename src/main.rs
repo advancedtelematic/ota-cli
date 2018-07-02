@@ -18,93 +18,72 @@ extern crate zip;
 
 mod api;
 mod commands;
+mod config;
 mod error;
 mod util;
 
 use clap::{AppSettings, ArgMatches};
-use env_logger::Builder;
-use log::LevelFilter;
-use reqwest::Client;
-use std::{io::Write, path::PathBuf};
 use uuid::Uuid;
 
-use api::{auth_plus::AccessToken,
-          campaigner::{CampaignHandler, Campaigner},
-          director::{Director, DirectorHandler, TargetFormat},
-          reposerver::{RepoTarget, Reposerver, ReposerverHandler}};
-use commands::{Campaign, Command, Package};
+use api::{
+    campaigner::{Campaigner, CampaignerApi},
+    registry::{Registry, RegistryApi},
+    reposerver::{Reposerver, ReposerverApi, TargetPackage},
+};
+use commands::{Campaign, Command, Group, Package};
+use config::Config;
 use error::Error;
+use util::start_logging;
+
 
 fn main() -> Result<(), Error> {
     let args = parse_args();
-    start_logging(args.value_of("log-level").unwrap_or("INFO"));
+    let (command, flags) = args.subcommand();
+    let flags = flags.expect("sub-command flags");
+    start_logging(args.value_of("level").unwrap_or("INFO"));
 
-    let (cmd, sub) = args.subcommand();
-    let cmd = cmd.parse::<Command>()?;
-    let sub = sub.expect("subcommand matches");
+    match command.parse()? {
+        Command::Init => Config::init_matches(&flags),
 
-    let client = Client::new();
-    let zip: PathBuf = args.value_of("credentials-zip").expect("--credentials-zip").into();
-    let (client_clone, zip_clone) = (client.clone(), zip.clone());
-    let token = Box::new(move || AccessToken::refresh(&client_clone, &zip_clone));
-
-    match cmd {
         Command::Campaign => {
-            let campaigner_url = sub.value_of("campaigner-url").expect("--campaigner-url").parse()?;
-            let campaign = CampaignHandler::new(&client, campaigner_url, token.clone());
+            let mut config = Config::load_default()?;
+            let (campaign, flags) = flags.subcommand();
+            let flags = flags.expect("campaign flags");
+            let id = || flags.value_of("id").expect("--id").parse::<Uuid>();
 
-            let (cmd, sub) = sub.subcommand();
-            let sub = sub.expect("campaign subcommand matches");
-            let id = |args: &ArgMatches| args.value_of("campaign-id").expect("--campaign-id").parse::<Uuid>();
+            match campaign.parse()? {
+                Campaign::Create => Campaigner::create_from_matches(&mut config, &flags),
+                Campaign::Get => Campaigner::get(&mut config, id()?),
+                Campaign::Launch => Campaigner::launch(&mut config, id()?),
+                Campaign::Stats => Campaigner::stats(&mut config, id()?),
+                Campaign::Cancel => Campaigner::cancel(&mut config, id()?),
+            }
+        }
 
-            match cmd.parse()? {
-                Campaign::Create => {
-                    let director_url = sub.value_of("director-url").expect("--director-url").parse()?;
-                    let director = DirectorHandler::new(&client, director_url, token);
+        Command::Group => {
+            let mut config = Config::load_default()?;
+            let (group, flags) = flags.subcommand();
+            let flags = flags.expect("group flags");
+            let id = || flags.value_of("group").expect("--group").parse::<Uuid>();
+            let name = || flags.value_of("name").expect("--name");
+            let device = || flags.value_of("device").expect("--device").parse::<Uuid>();
 
-                    let campaign_id = match sub.value_of("campaign-id") {
-                        Some(id) => id.parse()?,
-                        None => Uuid::new_v4(),
-                    };
-                    let name = sub.value_of("name").expect("--name");
-                    let groups = sub.values_of("groups")
-                        .expect("--groups")
-                        .map(Uuid::parse_str)
-                        .collect::<Result<Vec<_>, _>>()?;
-
-                    campaign.create(campaign_id, name, &groups)
-                }
-                Campaign::Get => campaign.get(id(sub)?),
-                Campaign::Launch => campaign.launch(id(sub)?),
-                Campaign::Stats => campaign.stats(id(sub)?),
-                Campaign::Cancel => campaign.cancel(id(sub)?),
+            match group.parse()? {
+                Group::Create => Registry::create_group(&mut config, name()),
+                Group::Rename => Registry::rename_group(&mut config, id()?, name()),
+                Group::List => Registry::delegate(&mut config, flags),
+                Group::Add => Registry::add_to_group(&mut config, id()?, device()?),
+                Group::Remove => Registry::remove_from_group(&mut config, id()?, device()?),
             }
         }
 
         Command::Package => {
-            let reposerver = ReposerverHandler::new(&client, zip, token)?;
+            let mut config = Config::load_default()?;
+            let (package, flags) = flags.subcommand();
+            let flags = flags.expect("package flags");
 
-            let (cmd, sub) = sub.subcommand();
-            let sub = sub.expect("package subcommand matches");
-
-            match cmd.parse()? {
-                Package::Add => {
-                    let name = sub.value_of("name").expect("--name").into();
-                    let version = sub.value_of("version").expect("--version").into();
-                    let format = sub.value_of("format").expect("--format").parse::<TargetFormat>()?;
-                    let hardware_ids: Vec<_> = sub.values_of("hardware-ids")
-                        .expect("--hardware-ids")
-                        .map(String::from)
-                        .collect();
-                    let target = if let Some(path) = sub.value_of("path") {
-                        RepoTarget::Path(path.into())
-                    } else if let Some(url) = sub.value_of("url") {
-                        RepoTarget::Url(url.parse()?)
-                    } else {
-                        return Err(Error::CommandPackage("one of --path or --url needed".into()));
-                    };
-                    reposerver.put_target(name, version, hardware_ids, format, target)
-                }
+            match package.parse()? {
+                Package::Add => Reposerver::add_package(&mut config, TargetPackage::from_matches(flags)?),
             }
         }
     }
@@ -118,47 +97,99 @@ fn parse_args<'a>() -> ArgMatches<'a> {
       (setting: AppSettings::InferSubcommands)
       (setting: AppSettings::DeriveDisplayOrder)
 
-      (@arg ("log-level"): -l --("log-level") [level] "(optional) Set the logging level")
-      (@arg ("credentials-zip"): -z --("credentials-zip") <path> "Path to credentials.zip")
+      (@arg level: -l --level [level] "(optional) Set the logging level")
+
+      (@subcommand init =>
+        (about: "Set config values before starting")
+        (setting: AppSettings::ArgRequiredElseHelp)
+        (setting: AppSettings::DeriveDisplayOrder)
+        (@arg credentials: -z --credentials <zip> "Path to credentials.zip")
+        (@arg campaigner: -c --campaigner <url> "Campaigner URL")
+        (@arg director: -d --director <url> "Director URL")
+        (@arg registry: -r --registry <url> "Device Registry URL")
+      )
 
       (@subcommand campaign =>
         (about: "Manage OTA campaigns")
         (setting: AppSettings::SubcommandRequiredElseHelp)
         (setting: AppSettings::DeriveDisplayOrder)
-        (@arg ("campaigner-url"): -c --("campaigner-url") <url> "Campaigner server")
 
         (@subcommand create =>
           (about: "Create a new campaign")
           (setting: AppSettings::ArgRequiredElseHelp)
           (setting: AppSettings::DeriveDisplayOrder)
-          (@arg ("director-url"): -d --("director-url") <url> "Director server")
-          (@arg ("campaign-id"): -i --("campaign-id") [uuid] "(optional) Specify the campaign ID")
           (@arg name: -n --name <name> "The campaign name")
           (@arg groups: -g --groups <uuid> ... "Apply the campaign to the following groups")
+          (@arg targets: -t --targets <toml> "Config file for the update targets")
         )
 
         (@subcommand get =>
           (about: "Retrieve campaign information")
           (setting: AppSettings::ArgRequiredElseHelp)
-          (@arg ("campaign-id"): -i --("campaign-id") <uuid> "The campaign ID")
+          (@arg id: -i --id <uuid> "The campaign ID")
         )
 
         (@subcommand launch =>
           (about: "Launch a created campaign")
           (setting: AppSettings::ArgRequiredElseHelp)
-          (@arg ("campaign-id"): -i --("campaign-id") <uuid> "The campaign ID")
+          (@arg id: -i --id <uuid> "The campaign ID")
         )
 
         (@subcommand stats =>
           (about: "Retrieve stats from a campaign")
           (setting: AppSettings::ArgRequiredElseHelp)
-          (@arg ("campaign-id"): -i --("campaign-id") <uuid> "The campaign ID")
+          (@arg id: -i --id <uuid> "The campaign ID")
         )
 
         (@subcommand cancel =>
           (about: "Cancel a launched campaign")
           (setting: AppSettings::ArgRequiredElseHelp)
-          (@arg ("campaign-id"): -i --("campaign-id") <uuid> "The campaign ID")
+          (@arg id: -i --id <uuid> "The campaign ID")
+        )
+      )
+
+      (@subcommand group =>
+        (about: "Manage OTA groups")
+        (setting: AppSettings::SubcommandRequiredElseHelp)
+        (setting: AppSettings::DeriveDisplayOrder)
+
+        (@subcommand create =>
+          (about: "Create a new group")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (@arg name: -n --name <name> "The group name")
+        )
+
+        (@subcommand rename =>
+          (about: "Rename an existing group")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::DeriveDisplayOrder)
+          (@arg group: -i --id <uuid> "The group ID")
+          (@arg name: -n --name <name> "The new group name")
+        )
+
+        (@subcommand list =>
+          (about: "List groups and their devices")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::DeriveDisplayOrder)
+          (@arg all: -a --all conflicts_with[group device] "List all groups")
+          (@arg group: -g --group [uuid] conflicts_with[device all] "List the devices in this group")
+          (@arg device: -d --device [uuid] conflicts_with[group all] "List the groups for this device")
+        )
+
+        (@subcommand add =>
+          (about: "Add a device to a group")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::DeriveDisplayOrder)
+          (@arg group: -g --group <uuid> "The group to add the device to")
+          (@arg device: -d --device <uuid> "The device to add")
+        )
+
+        (@subcommand remove =>
+          (about: "Remove a device from a group")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::DeriveDisplayOrder)
+          (@arg group: -g --group <uuid> "The group to remove the device from")
+          (@arg device: -d --device <uuid> "The device to remove")
         )
       )
 
@@ -173,23 +204,12 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (setting: AppSettings::DeriveDisplayOrder)
           (@arg name: -n --name <name> "The package name")
           (@arg version: -v --version <version> "The package version")
-          (@arg ("hardware-ids"): -h --("hardware-ids") <id> ... "Package works on these hardware IDs")
-          (@arg format: -f --format <format> "Package format (binary or ostree)")
+          (@arg hardware: -h --hardware <id> ... "Package works on these hardware IDs")
           (@arg path: -p --path [path] conflicts_with[url] "Path to package contents")
           (@arg url: -u --url [url] conflicts_with[path] "URL to package contents")
+          (@arg binary: -b --binary conflicts_with[ostree] "Binary package format")
+          (@arg ostree: -o --ostree conflicts_with[binary] "OSTree package format")
         )
       )
     ).get_matches()
-}
-
-fn start_logging(level: &str) {
-    let mut builder = Builder::from_default_env();
-    builder
-        .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
-        .parse(level);
-    if level.to_uppercase() != "TRACE" {
-        builder.filter(Some("tokio"), LevelFilter::Info);
-        builder.filter(Some("hyper"), LevelFilter::Info);
-    }
-    builder.init();
 }

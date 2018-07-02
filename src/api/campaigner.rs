@@ -1,96 +1,97 @@
-use reqwest::header::{Authorization, Bearer, Headers};
-use reqwest::Client;
+use clap::ArgMatches;
 use uuid::Uuid;
 
-use api::auth_plus::Token;
+use api::director::{Director, DirectorApi, HardwareTargets, UpdateTargets};
+use config::Config;
 use error::{Error, Result};
-use url::Url;
 use util::print_resp;
 
-const API_VERSION: &'static str = "api/v2/campaigns";
 
-/// Available campaigner API methods.
-pub trait Campaigner {
-    fn create(&self, campaign_id: Uuid, name: &str, groups: &[Uuid]) -> Result<()>;
-    fn get(&self, campaign_id: Uuid) -> Result<()>;
-    fn launch(&self, campaign_id: Uuid) -> Result<()>;
-    fn stats(&self, campaign_id: Uuid) -> Result<()>;
-    fn cancel(&self, campaign_id: Uuid) -> Result<()>;
+/// Available Campaigner API methods.
+pub trait CampaignerApi {
+    fn create(&mut Config, campaign_id: Uuid, name: &str, groups: &[Uuid]) -> Result<()>;
+    fn get(&mut Config, campaign_id: Uuid) -> Result<()>;
+    fn launch(&mut Config, campaign_id: Uuid) -> Result<()>;
+    fn stats(&mut Config, campaign_id: Uuid) -> Result<()>;
+    fn cancel(&mut Config, campaign_id: Uuid) -> Result<()>;
 }
 
-/// Handle API calls to the campaigner server.
-pub struct CampaignHandler<'c> {
-    client: &'c Client,
-    server: Url,
-    token: Token,
-}
+/// Make API calls to manage campaigns.
+pub struct Campaigner;
 
-impl<'c> CampaignHandler<'c> {
-    pub fn new(client: &'c Client, server: Url, token: Token) -> Self {
-        CampaignHandler { client, server, token }
-    }
-
-    fn auth(&self) -> Result<Headers> {
-        let mut headers = Headers::new();
-        if let Some(resp) = (self.token)()? {
-            headers.set(Authorization(Bearer {
-                token: resp.access_token,
-            }));
-        }
-        Ok(headers)
+impl<'a> Campaigner {
+    /// Parse CLI arguments to create a new campaign.
+    pub fn create_from_matches(mut config: &mut Config, matches: &ArgMatches<'a>) -> Result<()> {
+        let name = matches.value_of("name").expect("--name");
+        let groups = matches
+            .values_of("groups")
+            .expect("--groups")
+            .map(Uuid::parse_str)
+            .collect::<::std::result::Result<Vec<_>, _>>()?;
+        let targets_file = matches.value_of("targets").expect("--targets");
+        let targets = UpdateTargets::from(HardwareTargets::from_file(targets_file)?);
+        let campaign_id = Director::create_mtu(&mut config, &targets)?;
+        Self::create(config, campaign_id, name, &groups)
     }
 }
 
-impl<'c> Campaigner for CampaignHandler<'c> {
-    fn create(&self, campaign_id: Uuid, name: &str, groups: &[Uuid]) -> Result<()> {
-        debug!(
-            "creating campaign with id: {}, name: {}, groups: {:?}",
-            campaign_id, name, groups
-        );
-        self.client
-            .post(&format!("{}{}", self.server, API_VERSION))
+impl CampaignerApi for Campaigner {
+    fn create(config: &mut Config, campaign_id: Uuid, name: &str, groups: &[Uuid]) -> Result<()> {
+        let url = format!("{}api/v2/campaigns", config.campaigner);
+        debug!("creating campaign {} ({}) for groups: {:?}", campaign_id, name, groups);
+        config
+            .client()
+            .post(&url)
             .json(&json!({"name": name, "update": campaign_id, "groups": groups}))
-            .headers(self.auth()?)
+            .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
             .and_then(print_resp)
     }
 
-    fn get(&self, campaign_id: Uuid) -> Result<()> {
-        debug!("getting campaign with id: {}", campaign_id);
-        self.client
-            .get(&format!("{}{}/{}", self.server, API_VERSION, campaign_id))
-            .headers(self.auth()?)
+    fn get(config: &mut Config, campaign_id: Uuid) -> Result<()> {
+        let url = format!("{}api/v2/campaigns/{}", config.campaigner, campaign_id);
+        debug!("getting campaign {}", campaign_id);
+        config
+            .client()
+            .get(&url)
+            .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
             .and_then(print_resp)
     }
 
-    fn launch(&self, campaign_id: Uuid) -> Result<()> {
-        debug!("launching campaign with id: {}", campaign_id);
-        self.client
-            .post(&format!("{}{}/{}/launch", self.server, API_VERSION, campaign_id))
-            .headers(self.auth()?)
+    fn launch(config: &mut Config, campaign_id: Uuid) -> Result<()> {
+        let url = format!("{}api/v2/campaigns/{}/launch", config.campaigner, campaign_id);
+        debug!("launching campaign {}", campaign_id);
+        config
+            .client()
+            .post(&url)
+            .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
             .and_then(print_resp)
     }
 
-    fn stats(&self, campaign_id: Uuid) -> Result<()> {
-        debug!("getting stats for campaign with id: {}", campaign_id);
-        self.client
-            .get(&format!("{}{}/{}/stats", self.server, API_VERSION, campaign_id))
-            .headers(self.auth()?)
+    fn stats(config: &mut Config, campaign_id: Uuid) -> Result<()> {
+        let url = format!("{}api/v2/campaigns/{}/stats", config.campaigner, campaign_id);
+        debug!("getting stats for campaign {}", campaign_id);
+        config
+            .client()
+            .get(&url)
+            .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
             .and_then(print_resp)
     }
 
-    fn cancel(&self, campaign_id: Uuid) -> Result<()> {
-        debug!("cancelling campaign with id: {}", campaign_id);
-        self.client
-            .post(&format!("{}{}/{}/cancel", self.server, API_VERSION, campaign_id))
-            .headers(self.auth()?)
+    fn cancel(config: &mut Config, campaign_id: Uuid) -> Result<()> {
+        let url = format!("{}api/v2/campaigns/{}/cancel", config.campaigner, campaign_id);
+        debug!("cancelling campaign {}", campaign_id);
+        config
+            .client()
+            .post(&url)
+            .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
             .and_then(print_resp)

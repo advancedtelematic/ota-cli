@@ -15,7 +15,7 @@ To get started, run `make` without any arguments to see a list of available opti
 
 ### Using cargo
 
-The easiest way to install Cargo is by following the instructions at [rustup.rs](https://rustup.rs). Afterwards you can build the CLI with `make cli`, which will place a binary named `campaign` in this project's root directory.
+The easiest way to install Cargo is by following the instructions at [rustup.rs](https://rustup.rs). Afterwards you can build the CLI with `make cli`, which will place a binary named `ota` in this project's root directory.
 
 ### Using docker
 
