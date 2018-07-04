@@ -32,8 +32,8 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let output = match self {
             Error::Auth(ref err) => format!("Auth error: {}", err),
-            Error::Command(ref err) => format!("Unknown command: {}", err),
-            Error::Flag(ref err) => format!("Bad command flags: {}", err),
+            Error::Command(ref err) => format!("Command input: {}", err),
+            Error::Flag(ref err) => format!("Command flags: {}", err),
             Error::Http(ref err) => format!("HTTP: {}", err),
             Error::Io(ref err) => format!("I/O: {}", err),
             Error::Json(ref err) => format!("JSON parsing: {}", err),

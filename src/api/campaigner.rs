@@ -1,7 +1,7 @@
 use clap::ArgMatches;
+use std::result;
 use uuid::Uuid;
 
-use api::director::{Director, DirectorApi, HardwareTargets, UpdateTargets};
 use config::Config;
 use error::{Error, Result};
 use util::print_resp;
@@ -9,11 +9,11 @@ use util::print_resp;
 
 /// Available Campaigner API methods.
 pub trait CampaignerApi {
-    fn create(&mut Config, campaign_id: Uuid, name: &str, groups: &[Uuid]) -> Result<()>;
-    fn get(&mut Config, campaign_id: Uuid) -> Result<()>;
-    fn launch(&mut Config, campaign_id: Uuid) -> Result<()>;
-    fn stats(&mut Config, campaign_id: Uuid) -> Result<()>;
-    fn cancel(&mut Config, campaign_id: Uuid) -> Result<()>;
+    fn create(&mut Config, update: Uuid, name: &str, groups: &[Uuid]) -> Result<()>;
+    fn get(&mut Config, campaign: Uuid) -> Result<()>;
+    fn launch(&mut Config, campaign: Uuid) -> Result<()>;
+    fn stats(&mut Config, campaign: Uuid) -> Result<()>;
+    fn cancel(&mut Config, campaign: Uuid) -> Result<()>;
 }
 
 /// Make API calls to manage campaigns.
@@ -21,76 +21,69 @@ pub struct Campaigner;
 
 impl<'a> Campaigner {
     /// Parse CLI arguments to create a new campaign.
-    pub fn create_from_matches(mut config: &mut Config, matches: &ArgMatches<'a>) -> Result<()> {
-        let name = matches.value_of("name").expect("--name");
-        let groups = matches
+    pub fn create_from_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<()> {
+        let update = flags.value_of("update").expect("--update").parse()?;
+        let name = flags.value_of("name").expect("--name");
+        let groups = flags
             .values_of("groups")
             .expect("--groups")
             .map(Uuid::parse_str)
-            .collect::<::std::result::Result<Vec<_>, _>>()?;
-        let targets_file = matches.value_of("targets").expect("--targets");
-        let targets = UpdateTargets::from(HardwareTargets::from_file(targets_file)?);
-        let campaign_id = Director::create_mtu(&mut config, &targets)?;
-        Self::create(config, campaign_id, name, &groups)
+            .collect::<result::Result<Vec<_>, _>>()?;
+        Self::create(config, update, name, &groups)
     }
 }
 
 impl CampaignerApi for Campaigner {
-    fn create(config: &mut Config, campaign_id: Uuid, name: &str, groups: &[Uuid]) -> Result<()> {
-        let url = format!("{}api/v2/campaigns", config.campaigner);
-        debug!("creating campaign {} ({}) for groups: {:?}", campaign_id, name, groups);
+    fn create(config: &mut Config, update: Uuid, name: &str, groups: &[Uuid]) -> Result<()> {
+        debug!("creating campaign {} with update {} for groups: {:?}", name, update, groups);
         config
             .client()
-            .post(&url)
-            .json(&json!({"name": name, "update": campaign_id, "groups": groups}))
+            .post(&format!("{}api/v2/campaigns", config.campaigner))
+            .json(&json!({"update": format!("{}", update), "name": name, "groups": groups}))
             .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
             .and_then(print_resp)
     }
 
-    fn get(config: &mut Config, campaign_id: Uuid) -> Result<()> {
-        let url = format!("{}api/v2/campaigns/{}", config.campaigner, campaign_id);
-        debug!("getting campaign {}", campaign_id);
+    fn get(config: &mut Config, campaign: Uuid) -> Result<()> {
+        debug!("getting campaign {}", campaign);
         config
             .client()
-            .get(&url)
+            .get(&format!("{}api/v2/campaigns/{}", config.campaigner, campaign))
             .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
             .and_then(print_resp)
     }
 
-    fn launch(config: &mut Config, campaign_id: Uuid) -> Result<()> {
-        let url = format!("{}api/v2/campaigns/{}/launch", config.campaigner, campaign_id);
-        debug!("launching campaign {}", campaign_id);
+    fn launch(config: &mut Config, campaign: Uuid) -> Result<()> {
+        debug!("launching campaign {}", campaign);
         config
             .client()
-            .post(&url)
+            .post(&format!("{}api/v2/campaigns/{}/launch", config.campaigner, campaign))
             .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
             .and_then(print_resp)
     }
 
-    fn stats(config: &mut Config, campaign_id: Uuid) -> Result<()> {
-        let url = format!("{}api/v2/campaigns/{}/stats", config.campaigner, campaign_id);
-        debug!("getting stats for campaign {}", campaign_id);
+    fn stats(config: &mut Config, campaign: Uuid) -> Result<()> {
+        debug!("getting stats for campaign {}", campaign);
         config
             .client()
-            .get(&url)
+            .get(&format!("{}api/v2/campaigns/{}/stats", config.campaigner, campaign))
             .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
             .and_then(print_resp)
     }
 
-    fn cancel(config: &mut Config, campaign_id: Uuid) -> Result<()> {
-        let url = format!("{}api/v2/campaigns/{}/cancel", config.campaigner, campaign_id);
-        debug!("cancelling campaign {}", campaign_id);
+    fn cancel(config: &mut Config, campaign: Uuid) -> Result<()> {
+        debug!("cancelling campaign {}", campaign);
         config
             .client()
-            .post(&url)
+            .post(&format!("{}api/v2/campaigns/{}/cancel", config.campaigner, campaign))
             .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)

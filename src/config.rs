@@ -28,6 +28,7 @@ pub struct Config {
     pub credentials: Option<Credentials>,
     #[serde(skip)]
     pub client: Option<Client>,
+    #[serde(skip)]
     pub token: Option<AccessToken>,
 
     #[serde(with = "url_serde")]
@@ -42,11 +43,11 @@ pub struct Config {
 
 impl<'a> Config {
     /// Initialize a new config from CLI arguments.
-    pub fn init_matches(matches: &ArgMatches<'a>) -> Result<()> {
-        let credentials: PathBuf = matches.value_of("credentials").expect("--credentials").into();
-        let campaigner = matches.value_of("campaigner").expect("--campaigner").parse()?;
-        let director = matches.value_of("director").expect("--director").parse()?;
-        let registry = matches.value_of("registry").expect("--registry").parse()?;
+    pub fn init_flags(flags: &ArgMatches<'a>) -> Result<()> {
+        let credentials: PathBuf = flags.value_of("credentials").expect("--credentials").into();
+        let campaigner = flags.value_of("campaigner").expect("--campaigner").parse()?;
+        let director = flags.value_of("director").expect("--director").parse()?;
+        let registry = flags.value_of("registry").expect("--registry").parse()?;
         Self::init(credentials, campaigner, director, registry)
     }
 
@@ -87,7 +88,7 @@ impl<'a> Config {
     /// Load the default config file.
     pub fn load_default() -> Result<Self> { Self::load(default_path()) }
 
-    /// Returns a clone of the cached HTTP client.
+    /// Create an HTTP client or return existing.
     pub fn client(&mut self) -> Client {
         if let None = self.client {
             self.client = Some(Client::new());
@@ -95,7 +96,7 @@ impl<'a> Config {
         self.client.clone().unwrap()
     }
 
-    /// Returns a clone of the cached access token.
+    /// Create an `AccessToken` or return existing.
     pub fn token(&mut self) -> Result<Option<AccessToken>> {
         if let None = self.token {
             self.token = AccessToken::refresh(&self.client(), self.credentials()?)?;
@@ -104,7 +105,7 @@ impl<'a> Config {
         Ok(self.token.clone())
     }
 
-    /// Returns a reference to the cached credentials.
+    /// Parse `Credentials` or return an existing reference.
     pub fn credentials(&mut self) -> Result<&Credentials> {
         if let None = self.credentials {
             self.credentials = Some(Credentials::parse(&self.credentials_zip)?);
@@ -112,7 +113,7 @@ impl<'a> Config {
         Ok(self.credentials.as_ref().unwrap())
     }
 
-    /// Returns a list of headers with a Bearer token added.
+    /// Return `Headers` with an optional Bearer token.
     pub fn bearer_token(&mut self) -> Result<Headers> {
         let mut headers = Headers::new();
         if let Some(t) = self.token()? {

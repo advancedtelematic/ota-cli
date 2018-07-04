@@ -22,14 +22,15 @@ impl AccessToken {
         match (&credentials.oauth2, &credentials.no_auth) {
             (Some(oauth), _) => {
                 debug!("fetching access token from auth-plus: {}", oauth.server);
-                let token = client
-                    .post(&format!("{}/token", oauth.server))
-                    .basic_auth(oauth.client_id.clone(), Some(oauth.client_secret.clone()))
-                    .header(ContentType::form_url_encoded())
-                    .body("grant_type=client_credentials")
-                    .send()?
-                    .json()?;
-                Ok(Some(token))
+                Ok(Some(
+                    client
+                        .post(&format!("{}/token", oauth.server))
+                        .basic_auth(oauth.client_id.clone(), Some(oauth.client_secret.clone()))
+                        .header(ContentType::form_url_encoded())
+                        .body("grant_type=client_credentials")
+                        .send()?
+                        .json()?,
+                ))
             }
             (None, Some(no_auth)) if *no_auth => Ok(None),
             _ => Err(Error::Auth("no parseable auth method from credentials.zip".into())),

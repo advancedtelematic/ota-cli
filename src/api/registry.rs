@@ -1,4 +1,8 @@
 use clap::ArgMatches;
+use std::{
+    fmt::{self, Display, Formatter},
+    str::FromStr,
+};
 use uuid::Uuid;
 
 use config::Config;
@@ -8,14 +12,17 @@ use util::print_resp;
 
 /// Available Device Registry API methods.
 pub trait RegistryApi {
+    fn create_device(&mut Config, name: &str, id: &str, kind: DeviceType) -> Result<()>;
+    fn list_device(&mut Config, device: Uuid) -> Result<()>;
+    fn list_all_devices(&mut Config) -> Result<()>;
+
     fn create_group(&mut Config, name: &str) -> Result<()>;
     fn rename_group(&mut Config, group: Uuid, name: &str) -> Result<()>;
-
     fn add_to_group(&mut Config, group: Uuid, device: Uuid) -> Result<()>;
     fn remove_from_group(&mut Config, group: Uuid, device: Uuid) -> Result<()>;
 
-    fn list_devices(&mut Config, group: Uuid) -> Result<()>;
     fn list_groups(&mut Config, device: Uuid) -> Result<()>;
+    fn list_devices(&mut Config, group: Uuid) -> Result<()>;
     fn list_all_groups(&mut Config) -> Result<()>;
 }
 
@@ -24,20 +31,61 @@ pub trait RegistryApi {
 pub struct Registry;
 
 impl<'a> Registry {
-    pub fn delegate(config: &mut Config, matches: &ArgMatches<'a>) -> Result<()> {
-        if let Some(group) = matches.value_of("group") {
-            Self::list_devices(config, group.parse()?)
-        } else if let Some(device) = matches.value_of("device") {
-            Self::list_groups(config, device.parse()?)
-        } else if matches.is_present("all") {
-            Self::list_all_groups(config)
-        } else {
-            Err(Error::Flag("one of --all, --group or --device flag required".into()))
+    /// Parse CLI arguments into device listing preferences.
+    pub fn list_device_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<()> {
+        match parse_list_flags(flags)? {
+            (true, _, _) => Self::list_all_devices(config),
+            (_, Some(device), _) => Self::list_device(config, device),
+            (_, _, Some(group)) => Self::list_devices(config, group),
+            _ => Err(Error::Flag("one of --all, --device, or --group required".into())),
+        }
+    }
+
+    /// Parse CLI arguments into group listing preferences.
+    pub fn list_group_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<()> {
+        match parse_list_flags(flags)? {
+            (true, _, _) => Self::list_all_groups(config),
+            (_, Some(device), _) => Self::list_groups(config, device),
+            (_, _, Some(group)) => Self::list_devices(config, group),
+            _ => Err(Error::Flag("one of --all, --device, or --group required".into())),
         }
     }
 }
 
 impl RegistryApi for Registry {
+    fn create_device(config: &mut Config, name: &str, id: &str, kind: DeviceType) -> Result<()> {
+        debug!("creating device {} of type {} with id {}", name, kind, id);
+        config
+            .client()
+            .post(&format!("{}api/v1/devices", config.registry))
+            .query(&[("deviceName", name), ("deviceId", id), ("kind", &format!("{}", kind))])
+            .send()
+            .map_err(Error::Http)
+            .and_then(print_resp)
+    }
+
+    fn list_device(config: &mut Config, device: Uuid) -> Result<()> {
+        debug!("listing details for device {}", device);
+        config
+            .client()
+            .get(&format!("{}api/v1/devices/{}", config.registry, device))
+            .headers(config.bearer_token()?)
+            .send()
+            .map_err(Error::Http)
+            .and_then(print_resp)
+    }
+
+    fn list_all_devices(config: &mut Config) -> Result<()> {
+        debug!("listing all devices");
+        config
+            .client()
+            .get(&format!("{}api/v1/devices", config.registry))
+            .headers(config.bearer_token()?)
+            .send()
+            .map_err(Error::Http)
+            .and_then(print_resp)
+    }
+
     fn create_group(config: &mut Config, name: &str) -> Result<()> {
         debug!("creating device group {}", name);
         config
@@ -54,7 +102,7 @@ impl RegistryApi for Registry {
         config
             .client()
             .put(&format!("{}api/v1/device_groups/{}/rename", config.registry, group))
-            .query(&[("groupId", format!("{}", group).as_ref()), ("groupName", name)])
+            .query(&[("groupId", &format!("{}", group), ("groupName", name))])
             .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
@@ -65,7 +113,7 @@ impl RegistryApi for Registry {
         debug!("adding device {} to group {}", device, group);
         config
             .client()
-            .post(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, device, group))
+            .post(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, group, device))
             .query(&[("deviceId", device), ("groupId", group)])
             .headers(config.bearer_token()?)
             .send()
@@ -77,8 +125,8 @@ impl RegistryApi for Registry {
         debug!("removing device {} from group {}", device, group);
         config
             .client()
-            .delete(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, device, group))
-            .query(&[("deviceId", device), ("groupId", group)])
+            .delete(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, group, device))
+            .query(&[("deviceId", format!("{}", device)), ("groupId", format!("{}", group))])
             .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
@@ -117,4 +165,56 @@ impl RegistryApi for Registry {
             .map_err(Error::Http)
             .and_then(print_resp)
     }
+}
+
+
+/// Available device types.
+#[derive(Clone, Copy, Debug)]
+pub enum DeviceType {
+    Vehicle,
+    Other,
+}
+
+impl<'a> DeviceType {
+    /// Parse CLI arguments into a `DeviceType`.
+    pub fn from_flags(flags: &ArgMatches<'a>) -> Result<Self> {
+        if flags.is_present("vehicle") && !flags.is_present("other") {
+            Ok(DeviceType::Vehicle)
+        } else if flags.is_present("other") {
+            Ok(DeviceType::Other)
+        } else {
+            Err(Error::Flag("Either --vehicle or --other flag is required".into()))
+        }
+    }
+}
+
+impl FromStr for DeviceType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_ref() {
+            "vehicle" => Ok(DeviceType::Vehicle),
+            "other" => Ok(DeviceType::Other),
+            _ => Err(Error::Parse(format!("unknown `DeviceType`: {}", s))),
+        }
+    }
+}
+
+impl Display for DeviceType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let text = match self {
+            DeviceType::Vehicle => "Vehicle",
+            DeviceType::Other => "Other",
+        };
+        write!(f, "{}", text)
+    }
+}
+
+
+/// Parse into a tuple of --all, --device, and --group flags.
+fn parse_list_flags<'a>(flags: &ArgMatches<'a>) -> Result<(bool, Option<Uuid>, Option<Uuid>)> {
+    let all = flags.is_present("all");
+    let device = if let Some(val) = flags.value_of("device") { Some(val.parse()?) } else { None };
+    let group = if let Some(val) = flags.value_of("group") { Some(val.parse()?) } else { None };
+    Ok((all, device, group))
 }

@@ -26,6 +26,7 @@ pub fn print_resp(mut resp: Response) -> Result<()> {
         body.len(),
         resp.headers()
     );
+
     if let Ok(json) = serde_json::from_slice::<Value>(&body) {
         print_bytes(serde_json::to_string_pretty(&json)?.as_bytes())
     } else {
@@ -33,6 +34,7 @@ pub fn print_resp(mut resp: Response) -> Result<()> {
     }
 }
 
+/// Print bytes to stdout.
 pub fn print_bytes(data: &[u8]) -> Result<()> {
     let stdout = io::stdout();
     let mut handle = stdout.lock();

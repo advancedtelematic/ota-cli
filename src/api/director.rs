@@ -19,9 +19,9 @@ use util::print_resp;
 /// Available director API methods.
 pub trait DirectorApi {
     /// Create a new multi-target update.
-    fn create_mtu(&mut Config, targets: &UpdateTargets) -> Result<Uuid>;
-    /// Launch a previously created multi-target update.
-    fn launch_mtu(&mut Config, device_id: Uuid, update_id: Uuid) -> Result<()>;
+    fn create_mtu(&mut Config, targets: &UpdateTargets) -> Result<()>;
+    /// Launch a multi-target update for a device.
+    fn launch_mtu(&mut Config, update: Uuid, device: Uuid) -> Result<()>;
 }
 
 
@@ -29,26 +29,24 @@ pub trait DirectorApi {
 pub struct Director;
 
 impl DirectorApi for Director {
-    fn create_mtu(config: &mut Config, targets: &UpdateTargets) -> Result<Uuid> {
-        let url = format!("{}api/v1/multi_target_updates", config.director);
+    fn create_mtu(config: &mut Config, targets: &UpdateTargets) -> Result<()> {
         debug!("creating multi-target update: {:?}", targets);
-        Ok(config
-            .client()
-            .post(&url)
-            .json(targets)
-            .headers(config.bearer_token()?)
-            .send()?
-            .json()?)
-    }
-
-    fn launch_mtu(config: &mut Config, device_id: Uuid, update_id: Uuid) -> Result<()> {
-        let url = format!(
-            "{}api/v1/admin/devices/{}/multi_target_update/{}",
-            config.director, device_id, update_id
-        );
         config
             .client()
-            .put(&url)
+            .post(&format!("{}api/v1/multi_target_updates", config.director))
+            .json(targets)
+            .headers(config.bearer_token()?)
+            .send()
+            .map_err(Error::Http)
+            .and_then(print_resp)
+    }
+
+    fn launch_mtu(config: &mut Config, update: Uuid, device: Uuid) -> Result<()> {
+        debug!("launching multi-target update {} for device {}", update, device);
+        let (upd, dev) = (update.hyphenated(), device.hyphenated());
+        config
+            .client()
+            .put(&format!("{}api/v1/admin/devices/{}/multi_target_update/{}", config.director, dev, upd))
             .headers(config.bearer_token()?)
             .send()
             .map_err(Error::Http)
@@ -57,18 +55,36 @@ impl DirectorApi for Director {
 }
 
 
-/// A TUF update target that can be applied to an ECU.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TufTarget {
-    pub target: String,
-    #[serde(rename = "targetLength")]
-    pub length: u64,
-    pub checksum: Checksum,
+/// An identifier for the type of hardware and applicable `Target`s.
+type HardwareId = String;
+
+/// A target referenced by `filepath` applicable to an ECU of type `hardware`.
+#[derive(Serialize, Deserialize)]
+pub struct Target {
+    pub filepath: String,
+    pub hardware: HardwareId,
+    pub format:   TargetFormat,
+    pub length:   u64,
+    pub hash:     String,
+    pub method:   ChecksumMethod,
 }
+
+/// Target requests to update hardware.
+#[derive(Serialize, Deserialize)]
+pub struct Targets {
+    pub targets: Vec<Target>,
+}
+
+impl Targets {
+    /// Parse a toml file into `Target` update requests.
+    pub fn from_file(input: impl AsRef<Path>) -> Result<Self> { Ok(toml::from_str(&fs::read_to_string(input).map_err(Error::Io)?)?) }
+}
+
 
 /// A request to update an ECU to a specific `TufTarget`.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TufUpdate {
+    /// Optionally confirm that the current target matches `from` before updating.
     pub from: Option<TufTarget>,
     pub to: TufTarget,
     #[serde(rename = "targetFormat")]
@@ -77,25 +93,34 @@ pub struct TufUpdate {
     pub generate_diff: bool,
 }
 
-/// A mapping from a hardware id's to TUF updates.
+/// A TUF target for an ECU.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TufTarget {
+    pub target: String,
+    #[serde(rename = "targetLength")]
+    pub length: u64,
+    pub checksum: Checksum,
+}
+
+/// An update request for each `EcuSerial` to a `TufUpdate` target.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct UpdateTargets {
-    pub targets: HashMap<String, TufUpdate>,
+    pub targets: HashMap<HardwareId, TufUpdate>,
 }
 
 impl UpdateTargets {
-    /// Convert from `HardwareTargets` for creating a multi-target update.
-    pub fn from(targets: HardwareTargets) -> Self {
+    /// Convert from `Targets` for creating a multi-target update.
+    pub fn from(targets: Targets) -> Self {
         Self {
             targets: targets.targets.into_iter().map(Self::to_update).collect(),
         }
     }
 
-    fn to_update(target: HardwareTarget) -> (String, TufUpdate) {
+    fn to_update(target: Target) -> (String, TufUpdate) {
         let update = TufUpdate {
             from: None,
             to: TufTarget {
-                target:   target.target,
+                target:   target.filepath,
                 length:   target.length,
                 checksum: Checksum {
                     method: target.method,
@@ -105,31 +130,8 @@ impl UpdateTargets {
             format: target.format,
             generate_diff: false,
         };
-        (target.hw_id, update)
+        (target.hardware, update)
     }
-}
-
-
-/// A target to apply to a specific type of hardware.
-#[derive(Serialize, Deserialize)]
-pub struct HardwareTarget {
-    pub hw_id:  String,
-    pub target: String,
-    pub format: TargetFormat,
-    pub length: u64,
-    pub hash:   String,
-    pub method: ChecksumMethod,
-}
-
-/// An input list of hardware update requests.
-#[derive(Serialize, Deserialize)]
-pub struct HardwareTargets {
-    pub targets: Vec<HardwareTarget>,
-}
-
-impl HardwareTargets {
-    /// Parse a toml file as a list of `HardwareTarget` items.
-    pub fn from_file(input: impl AsRef<Path>) -> Result<Self> { Ok(toml::from_str(&fs::read_to_string(input).map_err(Error::Io)?)?) }
 }
 
 
@@ -142,10 +144,10 @@ pub enum TargetFormat {
 
 impl<'a> TargetFormat {
     /// Parse CLI arguments into a `TargetFormat`.
-    pub fn from_matches(matches: &ArgMatches<'a>) -> Result<Self> {
-        if matches.is_present("binary") {
+    pub fn from_flags(flags: &ArgMatches<'a>) -> Result<Self> {
+        if flags.is_present("binary") {
             Ok(TargetFormat::Binary)
-        } else if matches.is_present("ostree") {
+        } else if flags.is_present("ostree") {
             Ok(TargetFormat::Ostree)
         } else {
             Err(Error::Flag("Either --binary or --ostree flag is required".into()))

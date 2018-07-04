@@ -1,7 +1,7 @@
 blank_lines_upper_bound = 2
 imports_layout = "HorizontalVertical"
 fn_single_line = true
-max_width = 140
+max_width = 160
 merge_imports = true
 reorder_impl_items = true
 report_todo = "Unnumbered"
