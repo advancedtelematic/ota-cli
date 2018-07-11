@@ -33,10 +33,9 @@ impl FromStr for Command {
 /// Available campaign sub-commands.
 #[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Debug)]
 pub enum Campaign {
+    List,
     Create,
     Launch,
-    Get,
-    Stats,
     Cancel,
 }
 
@@ -45,10 +44,9 @@ impl FromStr for Campaign {
 
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_ref() {
+            "list" => Ok(Campaign::List),
             "create" => Ok(Campaign::Create),
             "launch" => Ok(Campaign::Launch),
-            "get" => Ok(Campaign::Get),
-            "stats" => Ok(Campaign::Stats),
             "cancel" => Ok(Campaign::Cancel),
             _ => Err(Error::Command(format!("unknown campaign subcommand: {}", s))),
         }
@@ -58,8 +56,9 @@ impl FromStr for Campaign {
 /// Available device sub-commands.
 #[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Debug)]
 pub enum Device {
-    Create,
     List,
+    Create,
+    Delete,
 }
 
 impl FromStr for Device {
@@ -67,8 +66,9 @@ impl FromStr for Device {
 
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_ref() {
-            "create" => Ok(Device::Create),
             "list" => Ok(Device::List),
+            "create" => Ok(Device::Create),
+            "delete" => Ok(Device::Delete),
             _ => Err(Error::Command(format!("unknown device subcommand: {}", s))),
         }
     }
@@ -77,10 +77,10 @@ impl FromStr for Device {
 /// Available group sub-commands.
 #[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Debug)]
 pub enum Group {
-    Create,
-    Rename,
     List,
+    Create,
     Add,
+    Rename,
     Remove,
 }
 
@@ -89,10 +89,10 @@ impl FromStr for Group {
 
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_ref() {
-            "create" => Ok(Group::Create),
-            "rename" => Ok(Group::Rename),
             "list" => Ok(Group::List),
+            "create" => Ok(Group::Create),
             "add" => Ok(Group::Add),
+            "rename" => Ok(Group::Rename),
             "remove" => Ok(Group::Remove),
             _ => Err(Error::Command(format!("unknown group subcommand: {}", s))),
         }
@@ -102,8 +102,9 @@ impl FromStr for Group {
 /// Available package sub-commands.
 #[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Debug)]
 pub enum Package {
+    List,
     Add,
-    Get,
+    Fetch,
 }
 
 impl FromStr for Package {
@@ -111,8 +112,9 @@ impl FromStr for Package {
 
     fn from_str(s: &str) -> Result<Self> {
         match s.to_lowercase().as_ref() {
+            "list" => Ok(Package::List),
             "add" => Ok(Package::Add),
-            "get" => Ok(Package::Get),
+            "fetch" => Ok(Package::Fetch),
             _ => Err(Error::Command(format!("unknown package subcommand: {}", s))),
         }
     }

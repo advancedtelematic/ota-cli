@@ -1,12 +1,12 @@
 use clap::ArgMatches;
-use reqwest::multipart::Form;
+use reqwest::{multipart::Form, Client};
 use url::Url;
 use urlencoding;
 
 use api::director::TargetFormat;
 use config::Config;
 use error::{Error, Result};
-use util::print_resp;
+use http::{Http, HttpMethods};
 
 
 /// Available TUF Reposerver API methods.
@@ -22,8 +22,7 @@ impl ReposerverApi for Reposerver {
     fn add_package(config: &mut Config, package: TargetPackage) -> Result<()> {
         let filepath = format!("{}-{}", package.name, package.version);
         debug!("adding package with filepath {}", filepath);
-        config
-            .client()
+        let req = Client::new()
             .put(&format!("{}api/v1/user_repo/targets/{}", config.reposerver, filepath))
             .query(&[
                 ("name", urlencoding::encode(&package.name)),
@@ -35,22 +34,14 @@ impl ReposerverApi for Reposerver {
                 RepoTarget::Path(path) => Form::new().file("file", path)?,
                 RepoTarget::Url(url) => Form::new().file("fileUri", url.as_str())?,
             })
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+            .build()?;
+        Http::send(req, config.token()?)
     }
 
     fn get_package(config: &mut Config, name: &str, version: &str) -> Result<()> {
         let filepath = format!("{}-{}", name, version);
         debug!("fetching package with filepath {}", filepath);
-        config
-            .client()
-            .get(&format!("{}api/v1/user_repo/targets/{}", config.reposerver, filepath))
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+        Http::get(&format!("{}api/v1/user_repo/targets/{}", config.reposerver, filepath), config.token()?)
     }
 }
 

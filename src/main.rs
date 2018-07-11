@@ -9,6 +9,7 @@ extern crate serde;
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
+extern crate serde_urlencoded;
 extern crate toml;
 extern crate url;
 extern crate url_serde;
@@ -20,9 +21,12 @@ mod api;
 mod commands;
 mod config;
 mod error;
-mod util;
+mod http;
 
 use clap::{AppSettings, ArgMatches};
+use env_logger::Builder;
+use log::LevelFilter;
+use std::io::Write;
 
 use api::{
     campaigner::{Campaigner, CampaignerApi},
@@ -33,7 +37,6 @@ use api::{
 use commands::{Campaign, Command, Device, Group, Package, Update};
 use config::Config;
 use error::Result;
-use util::start_logging;
 
 fn main() -> Result<()> {
     let args = parse_args();
@@ -42,7 +45,7 @@ fn main() -> Result<()> {
     start_logging(args.value_of("level").unwrap_or("INFO"));
 
     match command.parse()? {
-        Command::Init => Config::init_flags(&flags),
+        Command::Init => Config::init_from_flags(&flags),
 
         Command::Campaign => {
             let mut config = Config::load_default()?;
@@ -50,12 +53,12 @@ fn main() -> Result<()> {
             let flags = flags.expect("campaign flags");
             let campaign = || flags.value_of("campaign").expect("--campaign").parse();
 
+            #[cfg_attr(rustfmt, rustfmt_skip)] 
             match campaign_cmd.parse()? {
+                Campaign::List   => Campaigner::list_from_flags(&mut config, &flags),
                 Campaign::Create => Campaigner::create_from_flags(&mut config, &flags),
-                Campaign::Get => Campaigner::get(&mut config, campaign()?),
-                Campaign::Launch => Campaigner::launch(&mut config, campaign()?),
-                Campaign::Stats => Campaigner::stats(&mut config, campaign()?),
-                Campaign::Cancel => Campaigner::cancel(&mut config, campaign()?),
+                Campaign::Launch => Campaigner::launch_campaign(&mut config, campaign()?),
+                Campaign::Cancel => Campaigner::cancel_campaign(&mut config, campaign()?),
             }
         }
 
@@ -63,12 +66,15 @@ fn main() -> Result<()> {
             let mut config = Config::load_default()?;
             let (device_cmd, flags) = flags.subcommand();
             let flags = flags.expect("device flags");
+            let device = || flags.value_of("device").expect("--device").parse();
             let name = || flags.value_of("name").expect("--name");
             let id = || flags.value_of("id").expect("--id");
 
+            #[cfg_attr(rustfmt, rustfmt_skip)] 
             match device_cmd.parse()? {
+                Device::List   => Registry::list_device_flags(&mut config, flags),
                 Device::Create => Registry::create_device(&mut config, name(), id(), DeviceType::from_flags(flags)?),
-                Device::List => Registry::list_device_flags(&mut config, flags),
+                Device::Delete => Registry::delete_device(&mut config, device()?),
             }
         }
 
@@ -80,12 +86,13 @@ fn main() -> Result<()> {
             let device = || flags.value_of("device").expect("--device").parse();
             let name = || flags.value_of("name").expect("--name");
 
+            #[cfg_attr(rustfmt, rustfmt_skip)] 
             match group_cmd.parse()? {
+                Group::List   => Registry::list_group_flags(&mut config, flags),
                 Group::Create => Registry::create_group(&mut config, name()),
-                Group::Rename => Registry::rename_group(&mut config, group()?, name()),
-                Group::List => Registry::list_group_flags(&mut config, flags),
-                Group::Add => Registry::add_to_group(&mut config, group()?, device()?),
+                Group::Add    => Registry::add_to_group(&mut config, group()?, device()?),
                 Group::Remove => Registry::remove_from_group(&mut config, group()?, device()?),
+                Group::Rename => Registry::rename_group(&mut config, group()?, name()),
             }
         }
 
@@ -96,9 +103,11 @@ fn main() -> Result<()> {
             let name = || flags.value_of("name").expect("--name");
             let version = || flags.value_of("version").expect("--version");
 
+            #[cfg_attr(rustfmt, rustfmt_skip)] 
             match package_cmd.parse()? {
-                Package::Add => Reposerver::add_package(&mut config, TargetPackage::from_flags(flags)?),
-                Package::Get => Reposerver::get_package(&mut config, name(), version()),
+                Package::List  => panic!("API not yet supported"),
+                Package::Add   => Reposerver::add_package(&mut config, TargetPackage::from_flags(flags)?),
+                Package::Fetch => Reposerver::get_package(&mut config, name(), version()),
             }
         }
 
@@ -119,7 +128,7 @@ fn main() -> Result<()> {
 }
 
 fn parse_args<'a>() -> ArgMatches<'a> {
-    clap_app!(("ota-cli") =>
+    clap_app!((crate_name!()) =>
       (version: crate_version!())
       (setting: AppSettings::SubcommandRequiredElseHelp)
       (setting: AppSettings::DeriveDisplayOrder)
@@ -147,6 +156,15 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (setting: AppSettings::InferSubcommands)
         (setting: AppSettings::UnifiedHelpMessage)
 
+        (@subcommand list =>
+          (about: "List campaign information")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::UnifiedHelpMessage)
+          (@arg all: -a --all conflicts_with[campaign stats] "List all campaigns")
+          (@arg campaign: -c --campaign [uuid] conflicts_with[all] "The campaign id")
+          (@arg stats: -s --stats conflicts_with[all] "List campaign stats")
+        )
+
         (@subcommand create =>
           (about: "Create a new campaign")
           (setting: AppSettings::ArgRequiredElseHelp)
@@ -157,22 +175,8 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg groups: -g --groups <uuid> ... "Apply the campaign to these groups")
         )
 
-        (@subcommand get =>
-          (about: "Retrieve campaign information")
-          (setting: AppSettings::ArgRequiredElseHelp)
-          (setting: AppSettings::UnifiedHelpMessage)
-          (@arg campaign: -c --campaign <uuid> "The campaign id")
-        )
-
         (@subcommand launch =>
           (about: "Launch a created campaign")
-          (setting: AppSettings::ArgRequiredElseHelp)
-          (setting: AppSettings::UnifiedHelpMessage)
-          (@arg campaign: -c --campaign <uuid> "The campaign id")
-        )
-
-        (@subcommand stats =>
-          (about: "Retrieve stats from a campaign")
           (setting: AppSettings::ArgRequiredElseHelp)
           (setting: AppSettings::UnifiedHelpMessage)
           (@arg campaign: -c --campaign <uuid> "The campaign id")
@@ -193,17 +197,6 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (setting: AppSettings::InferSubcommands)
         (setting: AppSettings::UnifiedHelpMessage)
 
-        (@subcommand create =>
-          (about: "Create a new device")
-          (setting: AppSettings::ArgRequiredElseHelp)
-          (setting: AppSettings::DeriveDisplayOrder)
-          (setting: AppSettings::UnifiedHelpMessage)
-          (@arg name: -n --name <name> "A device name")
-          (@arg id: -i --id <id> "A device identifier")
-          (@arg vehicle: -v --vehicle conflicts_with[other] "Vehicle device type")
-          (@arg other: -o --other conflicts_with[vehicle] "Other device type")
-        )
-
         (@subcommand list =>
           (about: "List devices")
           (setting: AppSettings::ArgRequiredElseHelp)
@@ -211,6 +204,24 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg all: -a --all conflicts_with[device] "List all devices")
           (@arg device: -d --device [uuid] conflicts_with[group all] "List information about this device")
           (@arg group: -g --group [uuid] conflicts_with[device all] "List the devices in this group")
+        )
+
+        (@subcommand create =>
+          (about: "Create a new device")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::DeriveDisplayOrder)
+          (setting: AppSettings::UnifiedHelpMessage)
+          (@arg name: -n --name <name> "A device display name")
+          (@arg id: -i --id <id> "A device identifier (e.g. VIN)")
+          (@arg vehicle: -v --vehicle conflicts_with[other] "Vehicle device type")
+          (@arg other: -o --other conflicts_with[vehicle] "Other device type")
+        )
+
+        (@subcommand delete =>
+          (about: "Delete an existing device")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::UnifiedHelpMessage)
+          (@arg device: -d --device <uuid> "The device id")
         )
       )
 
@@ -221,22 +232,6 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (setting: AppSettings::InferSubcommands)
         (setting: AppSettings::UnifiedHelpMessage)
 
-        (@subcommand create =>
-          (about: "Create a new group")
-          (setting: AppSettings::ArgRequiredElseHelp)
-          (setting: AppSettings::UnifiedHelpMessage)
-          (@arg name: -n --name <name> "The group name")
-        )
-
-        (@subcommand rename =>
-          (about: "Rename an existing group")
-          (setting: AppSettings::ArgRequiredElseHelp)
-          (setting: AppSettings::DeriveDisplayOrder)
-          (setting: AppSettings::UnifiedHelpMessage)
-          (@arg group: -g --group <uuid> "The group to rename")
-          (@arg name: -n --name <name> "The new group name")
-        )
-
         (@subcommand list =>
           (about: "List groups and their devices")
           (setting: AppSettings::ArgRequiredElseHelp)
@@ -245,6 +240,13 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg all: -a --all conflicts_with[group device] "List all groups")
           (@arg group: -g --group [uuid] conflicts_with[device all] "List the devices in this group")
           (@arg device: -d --device [uuid] conflicts_with[group all] "List the groups for this device")
+        )
+
+        (@subcommand create =>
+          (about: "Create a new group")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::UnifiedHelpMessage)
+          (@arg name: -n --name <name> "The group name")
         )
 
         (@subcommand add =>
@@ -264,6 +266,15 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg group: -g --group <uuid> "The group to remove the device from")
           (@arg device: -d --device <uuid> "The device to remove")
         )
+
+        (@subcommand rename =>
+          (about: "Rename an existing group")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::DeriveDisplayOrder)
+          (setting: AppSettings::UnifiedHelpMessage)
+          (@arg group: -g --group <uuid> "The group to rename")
+          (@arg name: -n --name <name> "The new group name")
+        )
       )
 
       (@subcommand package =>
@@ -272,6 +283,10 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (setting: AppSettings::DeriveDisplayOrder)
         (setting: AppSettings::InferSubcommands)
         (setting: AppSettings::UnifiedHelpMessage)
+
+        (@subcommand list =>
+          (about: "List available packages")
+        )
 
         (@subcommand add =>
           (about: "Add a new package")
@@ -287,8 +302,8 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg ostree: -o --ostree conflicts_with[binary] "OSTree package format")
         )
 
-        (@subcommand get =>
-          (about: "Get package contents")
+        (@subcommand fetch =>
+          (about: "Fetch package contents")
           (setting: AppSettings::ArgRequiredElseHelp)
           (setting: AppSettings::UnifiedHelpMessage)
           (@arg name: -n --name <name> "The package name")
@@ -319,4 +334,12 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         )
       )
     ).get_matches()
+}
+
+fn start_logging(level: &str) {
+    Builder::from_default_env()
+        .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+        .parse(level)
+        .filter(Some("tokio"), LevelFilter::Info)
+        .init();
 }

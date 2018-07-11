@@ -6,7 +6,7 @@ To get started, run `make` without any arguments to see a list of available opti
 
 ```
       help : Print this message and exit
-       cli : Build the OTA CLI
+       ota : Build the OTA CLI
     docker : Build the OTA CLI using Docker
      clean : Clean-up all build output
 ```
@@ -15,7 +15,7 @@ To get started, run `make` without any arguments to see a list of available opti
 
 ### Using cargo
 
-The easiest way to install Cargo is by following the instructions at [rustup.rs](https://rustup.rs). Afterwards you can build the CLI with `make cli`, which will place a binary named `ota` in this project's root directory.
+The easiest way to install Cargo is by following the instructions at [rustup.rs](https://rustup.rs). Afterwards you can build the CLI with `make ota`, which will place a binary named `ota` in this project's root directory.
 
 ### Using docker
 
@@ -23,7 +23,7 @@ Run `make docker` to build the CLI using Docker (for an x86 linux target by defa
 
 ## Usage
 
-Run `./ota` without any arguments to print the following help output:
+Run `ota` without any arguments to print the following help output:
 
 ```
 ota-cli 0.1.0

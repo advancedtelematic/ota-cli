@@ -1,5 +1,6 @@
 use clap::ArgMatches;
-use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
+use reqwest::Client;
+use serde::{self, Deserialize, Deserializer};
 use std::{
     collections::HashMap,
     fmt::{self, Display, Formatter},
@@ -8,12 +9,12 @@ use std::{
     result,
     str::FromStr,
 };
+use toml;
 use uuid::Uuid;
 
 use config::Config;
 use error::{Error, Result};
-use toml;
-use util::print_resp;
+use http::{Http, HttpMethods};
 
 
 /// Available director API methods.
@@ -31,26 +32,17 @@ pub struct Director;
 impl DirectorApi for Director {
     fn create_mtu(config: &mut Config, targets: &UpdateTargets) -> Result<()> {
         debug!("creating multi-target update: {:?}", targets);
-        config
-            .client()
-            .post(&format!("{}api/v1/multi_target_updates", config.director))
-            .json(targets)
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+        let req = Client::new()
+            .get(&format!("{}api/v1/multi_target_updates", config.director))
+            .json(&json!(targets))
+            .build()?;
+        Http::send(req, config.token()?)
     }
 
     fn launch_mtu(config: &mut Config, update: Uuid, device: Uuid) -> Result<()> {
         debug!("launching multi-target update {} for device {}", update, device);
-        let (upd, dev) = (update.hyphenated(), device.hyphenated());
-        config
-            .client()
-            .put(&format!("{}api/v1/admin/devices/{}/multi_target_update/{}", config.director, dev, upd))
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+        let url = format!("{}api/v1/admin/devices/{}/multi_target_update/{}", config.director, device, update);
+        Http::put(&url, config.token()?)
     }
 }
 
@@ -58,21 +50,23 @@ impl DirectorApi for Director {
 /// An identifier for the type of hardware and applicable `Target`s.
 type HardwareId = String;
 
-/// A target referenced by `filepath` applicable to an ECU of type `hardware`.
+/// A target file applicable to an ECU of type `hardware`.
 #[derive(Serialize, Deserialize)]
-pub struct Target {
-    pub filepath: String,
-    pub hardware: HardwareId,
-    pub format:   TargetFormat,
-    pub length:   u64,
-    pub hash:     String,
-    pub method:   ChecksumMethod,
+pub struct TargetFile {
+    pub hardware_id:   HardwareId,
+    pub name:          String,
+    pub version:       String,
+    pub format:        TargetFormat,
+    pub length:        u64,
+    pub hash:          String,
+    pub method:        ChecksumMethod,
+    pub generate_diff: Option<bool>,
 }
 
 /// Target requests to update hardware.
 #[derive(Serialize, Deserialize)]
 pub struct Targets {
-    pub targets: Vec<Target>,
+    pub targets: Vec<TargetFile>,
 }
 
 impl Targets {
@@ -85,6 +79,7 @@ impl Targets {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TufUpdate {
     /// Optionally confirm that the current target matches `from` before updating.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<TufTarget>,
     pub to: TufTarget,
     #[serde(rename = "targetFormat")]
@@ -116,11 +111,11 @@ impl UpdateTargets {
         }
     }
 
-    fn to_update(target: Target) -> (String, TufUpdate) {
+    fn to_update(target: TargetFile) -> (String, TufUpdate) {
         let update = TufUpdate {
             from: None,
             to: TufTarget {
-                target:   target.filepath,
+                target:   format!("{}-{}", target.name, target.version),
                 length:   target.length,
                 checksum: Checksum {
                     method: target.method,
@@ -128,15 +123,16 @@ impl UpdateTargets {
                 },
             },
             format: target.format,
-            generate_diff: false,
+            generate_diff: target.generate_diff.unwrap_or(false),
         };
-        (target.hardware, update)
+        (target.hardware_id, update)
     }
 }
 
 
 /// Available target types.
-#[derive(Clone, Copy, Debug)]
+#[derive(Serialize, Clone, Copy, Debug)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TargetFormat {
     Binary,
     Ostree,
@@ -177,10 +173,6 @@ impl Display for TargetFormat {
     }
 }
 
-impl Serialize for TargetFormat {
-    fn serialize<S: Serializer>(&self, ser: S) -> result::Result<S::Ok, S::Error> { ser.serialize_str(&format!("{}", self)) }
-}
-
 impl<'de> Deserialize<'de> for TargetFormat {
     fn deserialize<D: Deserializer<'de>>(de: D) -> result::Result<Self, D::Error> {
         let s: String = Deserialize::deserialize(de)?;
@@ -197,7 +189,8 @@ pub struct Checksum {
 }
 
 /// Available checksum methods for target metadata verification.
-#[derive(Clone, Copy, Debug)]
+#[derive(Serialize, Clone, Copy, Debug)]
+#[serde(rename_all = "lowercase")]
 pub enum ChecksumMethod {
     Sha256,
     Sha512,
@@ -212,15 +205,6 @@ impl FromStr for ChecksumMethod {
             "sha512" => Ok(ChecksumMethod::Sha512),
             _ => Err(Error::Parse(format!("unknown `ChecksumMethod`: {}", s))),
         }
-    }
-}
-
-impl Serialize for ChecksumMethod {
-    fn serialize<S: Serializer>(&self, ser: S) -> result::Result<S::Ok, S::Error> {
-        ser.serialize_str(match *self {
-            ChecksumMethod::Sha256 => "sha256",
-            ChecksumMethod::Sha512 => "sha512",
-        })
     }
 }
 

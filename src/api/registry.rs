@@ -1,4 +1,5 @@
 use clap::ArgMatches;
+use reqwest::Client;
 use std::{
     fmt::{self, Display, Formatter},
     str::FromStr,
@@ -7,12 +8,13 @@ use uuid::Uuid;
 
 use config::Config;
 use error::{Error, Result};
-use util::print_resp;
+use http::{Http, HttpMethods};
 
 
 /// Available Device Registry API methods.
 pub trait RegistryApi {
     fn create_device(&mut Config, name: &str, id: &str, kind: DeviceType) -> Result<()>;
+    fn delete_device(&mut Config, device: Uuid) -> Result<()>;
     fn list_device(&mut Config, device: Uuid) -> Result<()>;
     fn list_all_devices(&mut Config) -> Result<()>;
 
@@ -55,115 +57,77 @@ impl<'a> Registry {
 impl RegistryApi for Registry {
     fn create_device(config: &mut Config, name: &str, id: &str, kind: DeviceType) -> Result<()> {
         debug!("creating device {} of type {} with id {}", name, kind, id);
-        config
-            .client()
-            .post(&format!("{}api/v1/devices", config.registry))
+        let req = Client::new()
+            .put(&format!("{}api/v1/devices", config.registry))
             .query(&[("deviceName", name), ("deviceId", id), ("kind", &format!("{}", kind))])
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+            .build()?;
+        Http::send(req, config.token()?)
+    }
+
+    fn delete_device(config: &mut Config, device: Uuid) -> Result<()> {
+        debug!("deleting device {}", device);
+        Http::delete(&format!("{}api/v1/devices/{}", config.registry, device), config.token()?)
     }
 
     fn list_device(config: &mut Config, device: Uuid) -> Result<()> {
         debug!("listing details for device {}", device);
-        config
-            .client()
-            .get(&format!("{}api/v1/devices/{}", config.registry, device))
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+        Http::get(&format!("{}api/v1/devices/{}", config.registry, device), config.token()?)
     }
 
     fn list_all_devices(config: &mut Config) -> Result<()> {
         debug!("listing all devices");
-        config
-            .client()
-            .get(&format!("{}api/v1/devices", config.registry))
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+        Http::get(&format!("{}api/v1/devices", config.registry), config.token()?)
     }
 
     fn create_group(config: &mut Config, name: &str) -> Result<()> {
         debug!("creating device group {}", name);
-        config
-            .client()
+        let req = Client::new()
             .post(&format!("{}api/v1/device_groups", config.registry))
             .query(&[("groupName", name)])
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+            .build()?;
+        Http::send(req, config.token()?)
     }
 
     fn rename_group(config: &mut Config, group: Uuid, name: &str) -> Result<()> {
         debug!("renaming group {} to {}", group, name);
-        config
-            .client()
+        let req = Client::new()
             .put(&format!("{}api/v1/device_groups/{}/rename", config.registry, group))
             .query(&[("groupId", &format!("{}", group), ("groupName", name))])
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+            .build()?;
+        Http::send(req, config.token()?)
     }
 
     fn add_to_group(config: &mut Config, group: Uuid, device: Uuid) -> Result<()> {
         debug!("adding device {} to group {}", device, group);
-        config
-            .client()
+        let req = Client::new()
             .post(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, group, device))
             .query(&[("deviceId", device), ("groupId", group)])
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+            .build()?;
+        Http::send(req, config.token()?)
     }
 
     fn remove_from_group(config: &mut Config, group: Uuid, device: Uuid) -> Result<()> {
         debug!("removing device {} from group {}", device, group);
-        config
-            .client()
+        let req = Client::new()
             .delete(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, group, device))
             .query(&[("deviceId", format!("{}", device)), ("groupId", format!("{}", group))])
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+            .build()?;
+        Http::send(req, config.token()?)
     }
 
     fn list_devices(config: &mut Config, group: Uuid) -> Result<()> {
         debug!("listing devices in group {}", group);
-        config
-            .client()
-            .get(&format!("{}api/v1/device_groups/{}/devices", config.registry, group))
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+        Http::get(&format!("{}api/v1/device_groups/{}/devices", config.registry, group), config.token()?)
     }
 
     fn list_groups(config: &mut Config, device: Uuid) -> Result<()> {
         debug!("listing groups for device {}", device);
-        config
-            .client()
-            .get(&format!("{}api/v1/devices/{}/groups", config.registry, device))
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+        Http::get(&format!("{}api/v1/devices/{}/groups", config.registry, device), config.token()?)
     }
 
     fn list_all_groups(config: &mut Config) -> Result<()> {
         debug!("listing all groups");
-        config
-            .client()
-            .get(&format!("{}api/v1/device_groups", config.registry))
-            .headers(config.bearer_token()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
+        Http::get(&format!("{}api/v1/device_groups", config.registry), config.token()?)
     }
 }
 
@@ -178,7 +142,7 @@ pub enum DeviceType {
 impl<'a> DeviceType {
     /// Parse CLI arguments into a `DeviceType`.
     pub fn from_flags(flags: &ArgMatches<'a>) -> Result<Self> {
-        if flags.is_present("vehicle") && !flags.is_present("other") {
+        if flags.is_present("vehicle") {
             Ok(DeviceType::Vehicle)
         } else if flags.is_present("other") {
             Ok(DeviceType::Other)
