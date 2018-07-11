@@ -20,7 +20,7 @@ use http::{Http, HttpMethods};
 /// Available director API methods.
 pub trait DirectorApi {
     /// Create a new multi-target update.
-    fn create_mtu(&mut Config, targets: &UpdateTargets) -> Result<()>;
+    fn create_mtu(&mut Config, updates: &TufUpdates) -> Result<()>;
     /// Launch a multi-target update for a device.
     fn launch_mtu(&mut Config, update: Uuid, device: Uuid) -> Result<()>;
 }
@@ -30,11 +30,11 @@ pub trait DirectorApi {
 pub struct Director;
 
 impl DirectorApi for Director {
-    fn create_mtu(config: &mut Config, targets: &UpdateTargets) -> Result<()> {
-        debug!("creating multi-target update: {:?}", targets);
+    fn create_mtu(config: &mut Config, updates: &TufUpdates) -> Result<()> {
+        debug!("creating multi-target update: {:?}", updates);
         let req = Client::new()
             .get(&format!("{}api/v1/multi_target_updates", config.director))
-            .json(&json!(targets))
+            .json(&json!(updates))
             .build()?;
         Http::send(req, config.token()?)
     }
@@ -50,42 +50,52 @@ impl DirectorApi for Director {
 /// An identifier for the type of hardware and applicable `Target`s.
 type HardwareId = String;
 
-/// A target file applicable to an ECU of type `hardware`.
+/// Metadata describing an object that can be applied to an ECU.
 #[derive(Serialize, Deserialize)]
-pub struct TargetFile {
-    pub hardware_id:   HardwareId,
-    pub name:          String,
-    pub version:       String,
-    pub format:        TargetFormat,
-    pub length:        u64,
-    pub hash:          String,
-    pub method:        ChecksumMethod,
+pub struct TargetObject {
+    pub name:    String,
+    pub version: String,
+    pub length:  Option<u64>,
+    pub hash:    Option<String>,
+    pub method:  Option<ChecksumMethod>,
+}
+
+/// A request to update some hardware type to a new `TargetObject`.
+#[derive(Serialize, Deserialize)]
+pub struct TargetRequest {
+    pub target_format: TargetFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub generate_diff: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<TargetObject>,
+    pub to: TargetObject,
 }
 
-/// Target requests to update hardware.
+/// Parsed mapping from hardware identifiers to target requests.
 #[derive(Serialize, Deserialize)]
-pub struct Targets {
-    pub targets: Vec<TargetFile>,
+pub struct TargetRequests {
+    pub requests: HashMap<HardwareId, TargetRequest>,
 }
 
-impl Targets {
-    /// Parse a toml file into `Target` update requests.
-    pub fn from_file(input: impl AsRef<Path>) -> Result<Self> { Ok(toml::from_str(&fs::read_to_string(input).map_err(Error::Io)?)?) }
+impl TargetRequests {
+    /// Parse a toml file into `TargetRequests`.
+    pub fn from_file(input: impl AsRef<Path>) -> Result<Self> {
+        let requests = toml::from_str(&fs::read_to_string(input)?)?;
+        Ok(Self { requests })
+    }
 }
 
 
 /// A request to update an ECU to a specific `TufTarget`.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TufUpdate {
-    /// Optionally confirm that the current target matches `from` before updating.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub from: Option<TufTarget>,
-    pub to: TufTarget,
     #[serde(rename = "targetFormat")]
     pub format: TargetFormat,
     #[serde(rename = "generateDiff")]
     pub generate_diff: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<TufTarget>,
+    pub to: TufTarget,
 }
 
 /// A TUF target for an ECU.
@@ -99,39 +109,42 @@ pub struct TufTarget {
 
 /// An update request for each `EcuSerial` to a `TufUpdate` target.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct UpdateTargets {
-    pub targets: HashMap<HardwareId, TufUpdate>,
+pub struct TufUpdates {
+    pub updates: HashMap<HardwareId, TufUpdate>,
 }
 
-impl UpdateTargets {
-    /// Convert from `Targets` for creating a multi-target update.
-    pub fn from(targets: Targets) -> Self {
+impl TufUpdates {
+    /// Convert `TargetRequests` to `TufUpdates`.
+    pub fn from(targets: TargetRequests) -> Self {
         Self {
-            targets: targets.targets.into_iter().map(Self::to_update).collect(),
+            updates: targets.requests.into_iter().map(|(id, req)| (id, Self::to_update(req))).collect(),
         }
     }
 
-    fn to_update(target: TargetFile) -> (String, TufUpdate) {
-        let update = TufUpdate {
-            from: None,
-            to: TufTarget {
-                target:   format!("{}-{}", target.name, target.version),
-                length:   target.length,
-                checksum: Checksum {
-                    method: target.method,
-                    hash:   target.hash,
-                },
+    fn to_update(request: TargetRequest) -> TufUpdate {
+        TufUpdate {
+            format: request.target_format,
+            generate_diff: request.generate_diff.unwrap_or(false),
+            from: if let Some(from) = request.from { Some(Self::to_target(from)) } else { None },
+            to: Self::to_target(request.to),
+        }
+    }
+
+    fn to_target(target: TargetObject) -> TufTarget {
+        TufTarget {
+            target:   format!("{}-{}", target.name, target.version),
+            length:   target.length.unwrap_or(0),
+            checksum: Checksum {
+                method: target.method.unwrap_or(ChecksumMethod::Sha256),
+                hash:   target.hash.unwrap_or(target.version),
             },
-            format: target.format,
-            generate_diff: target.generate_diff.unwrap_or(false),
-        };
-        (target.hardware_id, update)
+        }
     }
 }
 
 
 /// Available target types.
-#[derive(Serialize, Clone, Copy, Debug)]
+#[derive(Serialize, Clone, Copy, Debug, Eq, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TargetFormat {
     Binary,
@@ -189,7 +202,7 @@ pub struct Checksum {
 }
 
 /// Available checksum methods for target metadata verification.
-#[derive(Serialize, Clone, Copy, Debug)]
+#[derive(Serialize, Clone, Copy, Debug, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ChecksumMethod {
     Sha256,
@@ -212,5 +225,45 @@ impl<'de> Deserialize<'de> for ChecksumMethod {
     fn deserialize<D: Deserializer<'de>>(de: D) -> result::Result<Self, D::Error> {
         let s: String = Deserialize::deserialize(de)?;
         s.parse().map_err(|err| serde::de::Error::custom(format!("{}", err)))
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
+    #[test]
+    fn parse_example_targets() {
+        let requests = TargetRequests::from_file("examples/targets.toml").expect("parse toml");
+        let updates = TufUpdates::from(requests).updates;
+        assert_eq!(updates.len(), 2);
+
+        if let Some(req) = updates.get("some-ecu-type") {
+            assert_eq!(req.format, TargetFormat::Binary);
+            assert_eq!(req.generate_diff, true);
+            if let Some(ref from) = req.from {
+                assert_eq!(from.target, "somefile-1.0.1");
+            } else {
+                panic!("missing `from` section")
+            }
+            assert_eq!(req.to.target, "somefile-1.0.2");
+            assert_eq!(req.to.checksum.hash, "abcd012345678901234567890123456789012345678901234567890123456789");
+            assert_eq!(req.to.checksum.method, ChecksumMethod::Sha256);
+        } else {
+            panic!("some-ecu-type not found");
+        }
+
+        if let Some(req) = updates.get("another ecu type") {
+            assert_eq!(req.format, TargetFormat::Ostree);
+            assert_eq!(req.generate_diff, false);
+            assert!(req.from.is_none());
+            assert_eq!(req.to.target, "my-branch-012345678901234567890123456789012345678901234567890123456789abcd");
+            assert_eq!(req.to.checksum.hash, "012345678901234567890123456789012345678901234567890123456789abcd");
+            assert_eq!(req.to.checksum.method, ChecksumMethod::Sha256);
+        } else {
+            panic!("another-ecu-type not found");
+        }
     }
 }

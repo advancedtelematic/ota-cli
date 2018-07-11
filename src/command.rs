@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use api::{
     campaigner::{Campaigner, CampaignerApi},
-    director::{Director, DirectorApi, Targets, UpdateTargets},
+    director::{Director, DirectorApi, TargetRequests, TufUpdates},
     registry::{DeviceType, Registry, RegistryApi},
     reposerver::{Reposerver, ReposerverApi, TargetPackage},
 };
@@ -81,7 +81,6 @@ impl<'a> Exec<'a> for Campaign {
             Campaign::Create => Campaigner::create_from_flags(&mut config, flags),
             Campaign::Launch => Campaigner::launch_campaign(&mut config, campaign()?),
             Campaign::Cancel => Campaigner::cancel_campaign(&mut config, campaign()?),
-            
         }
     }
 }
@@ -239,7 +238,7 @@ impl<'a> Exec<'a> for Update {
         let targets = || flags.value_of("targets").expect("--targets");
 
         match self {
-            Update::Create => Director::create_mtu(&mut config, &UpdateTargets::from(Targets::from_file(targets())?)),
+            Update::Create => Director::create_mtu(&mut config, &TufUpdates::from(TargetRequests::from_file(targets())?)),
             Update::Launch => Director::launch_mtu(&mut config, update()?, device()?)
         }
     }

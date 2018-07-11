@@ -7,6 +7,7 @@ use zip::ZipArchive;
 
 use config::Config;
 use error::{Error, Result};
+use http::Http;
 
 
 /// Available Auth+ API methods.
@@ -21,14 +22,13 @@ impl AuthPlusApi for AuthPlus {
     fn refresh_token(config: &mut Config) -> Result<Option<AccessToken>> {
         if let Some(oauth2) = config.credentials()?.oauth2()? {
             debug!("fetching access token from auth-plus: {}", oauth2.server);
-            let token = Client::new()
+            let req = Client::new()
                 .post(&format!("{}/token", oauth2.server))
                 .basic_auth(oauth2.client_id, Some(oauth2.client_secret))
                 .header(ContentType::form_url_encoded())
                 .body("grant_type=client_credentials")
-                .send()?
-                .json()?;
-            Ok(Some(token))
+                .build()?;
+            Ok(Some(Http::send_req(req, None)?.json()?))
         } else {
             Ok(None)
         }

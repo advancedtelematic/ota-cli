@@ -184,9 +184,11 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (setting: AppSettings::InferSubcommands)
         (setting: AppSettings::UnifiedHelpMessage)
 
+       /*
         (@subcommand list =>
           (about: "List available packages")
         )
+       */
 
         (@subcommand add =>
           (about: "Add a new package")

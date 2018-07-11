@@ -28,13 +28,15 @@ impl HttpMethods for Http {}
 
 impl Http {
     /// Send an HTTP request and print the response to stdout.
-    pub fn send(mut req: Request, token: Option<AccessToken>) -> Result<()> {
+    pub fn send(req: Request, token: Option<AccessToken>) -> Result<()> { Self::send_req(req, token).and_then(Self::print_response) }
+
+    /// Send an HTTP request and return the response.
+    pub fn send_req(mut req: Request, token: Option<AccessToken>) -> Result<Response> {
         Self::add_headers(&mut req, token);
         if let Some(body) = req.body() {
             debug!("request body:\n{:?}\n", body);
         }
-
-        Client::new().execute(req).map_err(Error::Http).and_then(Self::print_response)
+        Client::new().execute(req).map_err(Error::Http)
     }
 
     /// Add a bearer token and `x-ats-namespace` header when available.
