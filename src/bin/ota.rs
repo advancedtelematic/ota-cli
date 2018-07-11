@@ -1,130 +1,28 @@
 #[macro_use]
 extern crate clap;
 extern crate env_logger;
-#[macro_use]
 extern crate log;
-extern crate reqwest;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate serde_json;
-extern crate serde_urlencoded;
-extern crate toml;
-extern crate url;
-extern crate url_serde;
-extern crate urlencoding;
-extern crate uuid;
-extern crate zip;
-
-mod api;
-mod commands;
-mod config;
-mod error;
-mod http;
+extern crate ota;
 
 use clap::{AppSettings, ArgMatches};
 use env_logger::Builder;
 use log::LevelFilter;
 use std::io::Write;
 
-use api::{
-    campaigner::{Campaigner, CampaignerApi},
-    director::{Director, DirectorApi, Targets, UpdateTargets},
-    registry::{DeviceType, Registry, RegistryApi},
-    reposerver::{Reposerver, ReposerverApi, TargetPackage},
-};
-use commands::{Campaign, Command, Device, Group, Package, Update};
-use config::Config;
-use error::Result;
+use ota::command::{Command, Exec};
+use ota::error::Result;
 
 fn main() -> Result<()> {
     let args = parse_args();
-    let (command, flags) = args.subcommand();
-    let flags = flags.expect("sub-command flags");
-    start_logging(args.value_of("level").unwrap_or("INFO"));
+    Builder::from_default_env()
+        .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
+        .parse(args.value_of("level").unwrap_or("INFO"))
+        .filter(Some("tokio"), LevelFilter::Info)
+        .init();
 
-    match command.parse()? {
-        Command::Init => Config::init_from_flags(&flags),
-
-        Command::Campaign => {
-            let mut config = Config::load_default()?;
-            let (campaign_cmd, flags) = flags.subcommand();
-            let flags = flags.expect("campaign flags");
-            let campaign = || flags.value_of("campaign").expect("--campaign").parse();
-
-            #[cfg_attr(rustfmt, rustfmt_skip)] 
-            match campaign_cmd.parse()? {
-                Campaign::List   => Campaigner::list_from_flags(&mut config, &flags),
-                Campaign::Create => Campaigner::create_from_flags(&mut config, &flags),
-                Campaign::Launch => Campaigner::launch_campaign(&mut config, campaign()?),
-                Campaign::Cancel => Campaigner::cancel_campaign(&mut config, campaign()?),
-            }
-        }
-
-        Command::Device => {
-            let mut config = Config::load_default()?;
-            let (device_cmd, flags) = flags.subcommand();
-            let flags = flags.expect("device flags");
-            let device = || flags.value_of("device").expect("--device").parse();
-            let name = || flags.value_of("name").expect("--name");
-            let id = || flags.value_of("id").expect("--id");
-
-            #[cfg_attr(rustfmt, rustfmt_skip)] 
-            match device_cmd.parse()? {
-                Device::List   => Registry::list_device_flags(&mut config, flags),
-                Device::Create => Registry::create_device(&mut config, name(), id(), DeviceType::from_flags(flags)?),
-                Device::Delete => Registry::delete_device(&mut config, device()?),
-            }
-        }
-
-        Command::Group => {
-            let mut config = Config::load_default()?;
-            let (group_cmd, flags) = flags.subcommand();
-            let flags = flags.expect("group flags");
-            let group = || flags.value_of("group").expect("--group").parse();
-            let device = || flags.value_of("device").expect("--device").parse();
-            let name = || flags.value_of("name").expect("--name");
-
-            #[cfg_attr(rustfmt, rustfmt_skip)] 
-            match group_cmd.parse()? {
-                Group::List   => Registry::list_group_flags(&mut config, flags),
-                Group::Create => Registry::create_group(&mut config, name()),
-                Group::Add    => Registry::add_to_group(&mut config, group()?, device()?),
-                Group::Remove => Registry::remove_from_group(&mut config, group()?, device()?),
-                Group::Rename => Registry::rename_group(&mut config, group()?, name()),
-            }
-        }
-
-        Command::Package => {
-            let mut config = Config::load_default()?;
-            let (package_cmd, flags) = flags.subcommand();
-            let flags = flags.expect("package flags");
-            let name = || flags.value_of("name").expect("--name");
-            let version = || flags.value_of("version").expect("--version");
-
-            #[cfg_attr(rustfmt, rustfmt_skip)] 
-            match package_cmd.parse()? {
-                Package::List  => panic!("API not yet supported"),
-                Package::Add   => Reposerver::add_package(&mut config, TargetPackage::from_flags(flags)?),
-                Package::Fetch => Reposerver::get_package(&mut config, name(), version()),
-            }
-        }
-
-        Command::Update => {
-            let mut config = Config::load_default()?;
-            let (update_cmd, flags) = flags.subcommand();
-            let flags = flags.expect("update flags");
-            let update = || flags.value_of("update").expect("--update").parse();
-            let device = || flags.value_of("device").expect("--device").parse();
-            let targets = || flags.value_of("targets").expect("--targets");
-
-            match update_cmd.parse()? {
-                Update::Create => Director::create_mtu(&mut config, &UpdateTargets::from(Targets::from_file(targets())?)),
-                Update::Launch => Director::launch_mtu(&mut config, update()?, device()?)
-            }
-        }
-    }
+    let (cmd, flags) = args.subcommand();
+    let command = cmd.parse::<Command>()?;
+    command.exec(flags.expect("sub-command flags"))
 }
 
 fn parse_args<'a>() -> ArgMatches<'a> {
@@ -206,6 +104,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg group: -g --group [uuid] conflicts_with[device all] "List the devices in this group")
         )
 
+       /*
         (@subcommand create =>
           (about: "Create a new device")
           (setting: AppSettings::ArgRequiredElseHelp)
@@ -216,6 +115,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg vehicle: -v --vehicle conflicts_with[other] "Vehicle device type")
           (@arg other: -o --other conflicts_with[vehicle] "Other device type")
         )
+       */
 
         (@subcommand delete =>
           (about: "Delete an existing device")
@@ -334,12 +234,4 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         )
       )
     ).get_matches()
-}
-
-fn start_logging(level: &str) {
-    Builder::from_default_env()
-        .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
-        .parse(level)
-        .filter(Some("tokio"), LevelFilter::Info)
-        .init();
 }

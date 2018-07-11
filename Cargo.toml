@@ -1,12 +1,8 @@
 [package]
-name = "ota-cli"
+name = "ota"
 version = "0.1.0"
 authors = ["Shaun Taheri <shaun.taheri@here.com>"]
 publish = false
-
-[[bin]]
-name = "ota"
-path = "src/main.rs"
 
 [dependencies]
 clap = "2.31.2"
