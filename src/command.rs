@@ -5,7 +5,7 @@ use api::{
     campaigner::{Campaigner, CampaignerApi},
     director::{Director, DirectorApi, TargetRequests, TufUpdates},
     registry::{DeviceType, Registry, RegistryApi},
-    reposerver::{Reposerver, ReposerverApi, TargetPackage},
+    reposerver::{Reposerver, ReposerverApi, TufPackage},
 };
 use config::Config;
 use error::{Error, Result};
@@ -202,7 +202,7 @@ impl<'a> Exec<'a> for Package {
         #[cfg_attr(rustfmt, rustfmt_skip)] 
         match self {
             Package::List  => panic!("API not yet supported"),
-            Package::Add   => Reposerver::add_package(&mut config, TargetPackage::from_flags(flags)?),
+            Package::Add   => Reposerver::add_package(&mut config, TufPackage::from_flags(flags)?),
             Package::Fetch => Reposerver::get_package(&mut config, name(), version()),
         }
     }

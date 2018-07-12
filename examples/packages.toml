@@ -1,6 +1,13 @@
-[[packages]]
-name = "package1"
-version = "v1.2.3"
-hardware = "my-ecu"
-target = "/opt/ota/package1-v1.2.3"
+# upload a binary package named `foo` from a remote `url`
+[foo]
+url = "https://acme.org/downloads/foo"
+version = "1"
 format = "binary"
+hardware = ["acme-ecu-1"]
+
+# upload an ostree package with metadata from a filesystem `path`
+[my-branch]
+path = "/ota/my-branch-01234"
+version = "01234"
+format = "ostree"
+hardware = ["qemux86-64"]
