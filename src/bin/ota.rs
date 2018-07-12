@@ -9,8 +9,12 @@ use env_logger::Builder;
 use log::LevelFilter;
 use std::io::Write;
 
-use ota::command::{Command, Exec};
-use ota::error::Result;
+use ota::{
+    command::{Command, HttpRequest},
+    config::Config,
+    error::Result,
+    http::Http,
+};
 
 fn main() -> Result<()> {
     let args = parse_args();
@@ -22,7 +26,13 @@ fn main() -> Result<()> {
 
     let (cmd, flags) = args.subcommand();
     let command = cmd.parse::<Command>()?;
-    command.exec(flags.expect("sub-command flags"))
+    let flags = flags.expect("command flags");
+
+    if let Command::Init = command {
+        Config::init_from_flags(flags)
+    } else {
+        command.exec(flags).and_then(Http::print_response)
+    }
 }
 
 fn parse_args<'a>() -> ArgMatches<'a> {

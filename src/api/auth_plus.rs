@@ -28,7 +28,7 @@ impl AuthPlusApi for AuthPlus {
                 .header(ContentType::form_url_encoded())
                 .body("grant_type=client_credentials")
                 .build()?;
-            Ok(Some(Http::send_req(req, None)?.json()?))
+            Ok(Some(Http::send(req, None)?.json()?))
         } else {
             Ok(None)
         }

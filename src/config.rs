@@ -17,11 +17,13 @@ use error::{Error, Result};
 
 const CONFIG_FILE: &str = ".ota.conf";
 
+/// Config values passed to API methods for making HTTP requests.
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub credentials_zip: PathBuf,
     #[serde(skip)]
     pub credentials: Option<Credentials>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<AccessToken>,
 
     #[serde(with = "url_serde")]

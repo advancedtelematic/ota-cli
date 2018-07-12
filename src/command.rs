@@ -1,4 +1,5 @@
 use clap::ArgMatches;
+use reqwest::Response;
 use std::str::FromStr;
 
 use api::{
@@ -11,9 +12,9 @@ use config::Config;
 use error::{Error, Result};
 
 
-/// Execute a command.
-pub trait Exec<'a> {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<()>;
+/// Execute an HTTP request.
+pub trait HttpRequest<'a> {
+    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response>;
 }
 
 
@@ -28,17 +29,18 @@ pub enum Command {
     Update,
 }
 
-impl<'a> Exec<'a> for Command {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<()> {
+impl<'a> HttpRequest<'a> for Command {
+    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
         let (cmd, args) = flags.subcommand();
+        let args = args.expect("sub-command args");
         #[cfg_attr(rustfmt, rustfmt_skip)] 
         match self {
-            Command::Init     => Config::init_from_flags(flags),
-            Command::Campaign => cmd.parse::<Campaign>()?.exec(args.expect("campaign args")),
-            Command::Device   => cmd.parse::<Device>()?.exec(args.expect("device args")),
-            Command::Group    => cmd.parse::<Group>()?.exec(args.expect("group args")),
-            Command::Package  => cmd.parse::<Package>()?.exec(args.expect("package args")),
-            Command::Update   => cmd.parse::<Update>()?.exec(args.expect("update args")),
+            Command::Init     => panic!("Command::init does not handle HTTP requests"),
+            Command::Campaign => cmd.parse::<Campaign>()?.exec(args),
+            Command::Device   => cmd.parse::<Device>()?.exec(args),
+            Command::Group    => cmd.parse::<Group>()?.exec(args),
+            Command::Package  => cmd.parse::<Package>()?.exec(args),
+            Command::Update   => cmd.parse::<Update>()?.exec(args),
         }
     }
 }
@@ -70,8 +72,8 @@ pub enum Campaign {
     Cancel,
 }
 
-impl<'a> Exec<'a> for Campaign {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<()> {
+impl<'a> HttpRequest<'a> for Campaign {
+    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
         let mut config = Config::load_default()?;
         let campaign = || flags.value_of("campaign").expect("--campaign").parse();
 
@@ -109,8 +111,8 @@ pub enum Device {
     Delete,
 }
 
-impl<'a> Exec<'a> for Device {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<()> {
+impl<'a> HttpRequest<'a> for Device {
+    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
         let mut config = Config::load_default()?;
         let device = || flags.value_of("device").expect("--device").parse();
         let name = || flags.value_of("name").expect("--name");
@@ -150,8 +152,8 @@ pub enum Group {
     Remove,
 }
 
-impl<'a> Exec<'a> for Group {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<()> {
+impl<'a> HttpRequest<'a> for Group {
+    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
         let mut config = Config::load_default()?;
         let group = || flags.value_of("group").expect("--group").parse();
         let device = || flags.value_of("device").expect("--device").parse();
@@ -193,8 +195,8 @@ pub enum Package {
     Fetch,
 }
 
-impl<'a> Exec<'a> for Package {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<()> {
+impl<'a> HttpRequest<'a> for Package {
+    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
         let mut config = Config::load_default()?;
         let name = || flags.value_of("name").expect("--name");
         let version = || flags.value_of("version").expect("--version");
@@ -230,8 +232,8 @@ pub enum Update {
     Launch,
 }
 
-impl<'a> Exec<'a> for Update {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<()> {
+impl<'a> HttpRequest<'a> for Update {
+    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
         let mut config = Config::load_default()?;
         let update = || flags.value_of("update").expect("--update").parse();
         let device = || flags.value_of("device").expect("--device").parse();

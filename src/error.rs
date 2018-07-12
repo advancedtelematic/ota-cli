@@ -33,25 +33,25 @@ pub enum Error {
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        #[cfg_attr(rustfmt, rustfmt_skip)] 
         let output = match self {
-            Error::Auth(err) => format!("Authorization: {}", err),
+            Error::Auth(err)    => format!("Authorization: {}", err),
             Error::Command(err) => format!("Command input: {}", err),
-            Error::Flag(err) => format!("Command flags: {}", err),
-            Error::NotFound(name, help) => if let Some(help) = help {
-                format!("{} not found. {}", name, help)
-            } else {
-                format!("{} not found.", name)
+            Error::Flag(err)    => format!("Command flags: {}", err),
+            Error::NotFound(name, help) => match help {
+                Some(help) => format!("{} not found. {}", name, help),
+                None       => format!("{} not found.", name)
             },
-            Error::Parse(err) => format!("Parse error: {}", err),
-            Error::Token(err) => format!("Parsing access token: {}", err),
+            Error::Parse(err)   => format!("Parse error: {}", err),
+            Error::Token(err)   => format!("Parsing access token: {}", err),
 
-            Error::Http(err) => format!("HTTP: {}", err),
-            Error::Io(err) => format!("I/O: {}", err),
-            Error::Json(err) => format!("Parsing JSON: {}", err),
-            Error::Toml(err) => format!("Parsing TOML: {}", err),
-            Error::Url(err) => format!("Parsing URL: {}", err),
-            Error::Uuid(err) => format!("Parsing UUID: {}", err),
-            Error::Zip(err) => format!("Zip I/O: {}", err),
+            Error::Http(err)    => format!("HTTP: {}", err),
+            Error::Io(err)      => format!("I/O: {}", err),
+            Error::Json(err)    => format!("Parsing JSON: {}", err),
+            Error::Toml(err)    => format!("Parsing TOML: {}", err),
+            Error::Url(err)     => format!("Parsing URL: {}", err),
+            Error::Uuid(err)    => format!("Parsing UUID: {}", err),
+            Error::Zip(err)     => format!("Zip I/O: {}", err),
         };
         write!(f, "{}", output)
     }

@@ -1,5 +1,5 @@
 use clap::ArgMatches;
-use reqwest::Client;
+use reqwest::{Client, Response};
 use serde::{self, Deserialize, Deserializer};
 use std::{
     collections::HashMap,
@@ -20,9 +20,9 @@ use http::{Http, HttpMethods};
 /// Available director API methods.
 pub trait DirectorApi {
     /// Create a new multi-target update.
-    fn create_mtu(&mut Config, updates: &TufUpdates) -> Result<()>;
+    fn create_mtu(&mut Config, updates: &TufUpdates) -> Result<Response>;
     /// Launch a multi-target update for a device.
-    fn launch_mtu(&mut Config, update: Uuid, device: Uuid) -> Result<()>;
+    fn launch_mtu(&mut Config, update: Uuid, device: Uuid) -> Result<Response>;
 }
 
 
@@ -30,7 +30,7 @@ pub trait DirectorApi {
 pub struct Director;
 
 impl DirectorApi for Director {
-    fn create_mtu(config: &mut Config, updates: &TufUpdates) -> Result<()> {
+    fn create_mtu(config: &mut Config, updates: &TufUpdates) -> Result<Response> {
         debug!("creating multi-target update: {:?}", updates);
         let req = Client::new()
             .get(&format!("{}api/v1/multi_target_updates", config.director))
@@ -39,7 +39,7 @@ impl DirectorApi for Director {
         Http::send(req, config.token()?)
     }
 
-    fn launch_mtu(config: &mut Config, update: Uuid, device: Uuid) -> Result<()> {
+    fn launch_mtu(config: &mut Config, update: Uuid, device: Uuid) -> Result<Response> {
         debug!("launching multi-target update {} for device {}", update, device);
         let url = format!("{}api/v1/admin/devices/{}/multi_target_update/{}", config.director, device, update);
         Http::put(&url, config.token()?)

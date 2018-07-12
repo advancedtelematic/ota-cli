@@ -1,5 +1,5 @@
 use clap::ArgMatches;
-use reqwest::{multipart::Form, Client};
+use reqwest::{multipart::Form, Client, Response};
 use std::{collections::HashMap, fs, path::Path};
 use toml;
 use url::Url;
@@ -14,15 +14,15 @@ use http::{Http, HttpMethods};
 
 /// Available TUF Reposerver API methods.
 pub trait ReposerverApi {
-    fn add_package(&mut Config, package: TufPackage) -> Result<()>;
-    fn get_package(&mut Config, name: &str, version: &str) -> Result<()>;
+    fn add_package(&mut Config, package: TufPackage) -> Result<Response>;
+    fn get_package(&mut Config, name: &str, version: &str) -> Result<Response>;
 }
 
 /// Make API calls to the TUF Reposerver.
 pub struct Reposerver;
 
 impl ReposerverApi for Reposerver {
-    fn add_package(config: &mut Config, package: TufPackage) -> Result<()> {
+    fn add_package(config: &mut Config, package: TufPackage) -> Result<Response> {
         let filepath = format!("{}-{}", package.name, package.version);
         debug!("adding package with filepath {}", filepath);
         let req = Client::new()
@@ -41,7 +41,7 @@ impl ReposerverApi for Reposerver {
         Http::send(req, config.token()?)
     }
 
-    fn get_package(config: &mut Config, name: &str, version: &str) -> Result<()> {
+    fn get_package(config: &mut Config, name: &str, version: &str) -> Result<Response> {
         let filepath = format!("{}-{}", name, version);
         debug!("fetching package with filepath {}", filepath);
         Http::get(&format!("{}api/v1/user_repo/targets/{}", config.reposerver, filepath), config.token()?)

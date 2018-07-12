@@ -1,5 +1,5 @@
 use clap::ArgMatches;
-use reqwest::Client;
+use reqwest::{Client, Response};
 use std::{
     fmt::{self, Display, Formatter},
     str::FromStr,
@@ -13,19 +13,19 @@ use http::{Http, HttpMethods};
 
 /// Available Device Registry API methods.
 pub trait RegistryApi {
-    fn create_device(&mut Config, name: &str, id: &str, kind: DeviceType) -> Result<()>;
-    fn delete_device(&mut Config, device: Uuid) -> Result<()>;
-    fn list_device(&mut Config, device: Uuid) -> Result<()>;
-    fn list_all_devices(&mut Config) -> Result<()>;
+    fn create_device(&mut Config, name: &str, id: &str, kind: DeviceType) -> Result<Response>;
+    fn delete_device(&mut Config, device: Uuid) -> Result<Response>;
+    fn list_device(&mut Config, device: Uuid) -> Result<Response>;
+    fn list_all_devices(&mut Config) -> Result<Response>;
 
-    fn create_group(&mut Config, name: &str) -> Result<()>;
-    fn rename_group(&mut Config, group: Uuid, name: &str) -> Result<()>;
-    fn add_to_group(&mut Config, group: Uuid, device: Uuid) -> Result<()>;
-    fn remove_from_group(&mut Config, group: Uuid, device: Uuid) -> Result<()>;
+    fn create_group(&mut Config, name: &str) -> Result<Response>;
+    fn rename_group(&mut Config, group: Uuid, name: &str) -> Result<Response>;
+    fn add_to_group(&mut Config, group: Uuid, device: Uuid) -> Result<Response>;
+    fn remove_from_group(&mut Config, group: Uuid, device: Uuid) -> Result<Response>;
 
-    fn list_groups(&mut Config, device: Uuid) -> Result<()>;
-    fn list_devices(&mut Config, group: Uuid) -> Result<()>;
-    fn list_all_groups(&mut Config) -> Result<()>;
+    fn list_groups(&mut Config, device: Uuid) -> Result<Response>;
+    fn list_devices(&mut Config, group: Uuid) -> Result<Response>;
+    fn list_all_groups(&mut Config) -> Result<Response>;
 }
 
 
@@ -34,28 +34,30 @@ pub struct Registry;
 
 impl<'a> Registry {
     /// Parse CLI arguments into device listing preferences.
-    pub fn list_device_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<()> {
+    pub fn list_device_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<Response> {
+        #[cfg_attr(rustfmt, rustfmt_skip)] 
         match parse_list_flags(flags)? {
-            (true, _, _) => Self::list_all_devices(config),
+            (true, _, _)         => Self::list_all_devices(config),
             (_, Some(device), _) => Self::list_device(config, device),
-            (_, _, Some(group)) => Self::list_devices(config, group),
+            (_, _, Some(group))  => Self::list_devices(config, group),
             _ => Err(Error::Flag("one of --all, --device, or --group required".into())),
         }
     }
 
     /// Parse CLI arguments into group listing preferences.
-    pub fn list_group_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<()> {
+    pub fn list_group_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<Response> {
+        #[cfg_attr(rustfmt, rustfmt_skip)] 
         match parse_list_flags(flags)? {
-            (true, _, _) => Self::list_all_groups(config),
+            (true, _, _)         => Self::list_all_groups(config),
             (_, Some(device), _) => Self::list_groups(config, device),
-            (_, _, Some(group)) => Self::list_devices(config, group),
+            (_, _, Some(group))  => Self::list_devices(config, group),
             _ => Err(Error::Flag("one of --all, --device, or --group required".into())),
         }
     }
 }
 
 impl RegistryApi for Registry {
-    fn create_device(config: &mut Config, name: &str, id: &str, kind: DeviceType) -> Result<()> {
+    fn create_device(config: &mut Config, name: &str, id: &str, kind: DeviceType) -> Result<Response> {
         debug!("creating device {} of type {} with id {}", name, kind, id);
         let req = Client::new()
             .put(&format!("{}api/v1/devices", config.registry))
@@ -64,22 +66,22 @@ impl RegistryApi for Registry {
         Http::send(req, config.token()?)
     }
 
-    fn delete_device(config: &mut Config, device: Uuid) -> Result<()> {
+    fn delete_device(config: &mut Config, device: Uuid) -> Result<Response> {
         debug!("deleting device {}", device);
         Http::delete(&format!("{}api/v1/devices/{}", config.registry, device), config.token()?)
     }
 
-    fn list_device(config: &mut Config, device: Uuid) -> Result<()> {
+    fn list_device(config: &mut Config, device: Uuid) -> Result<Response> {
         debug!("listing details for device {}", device);
         Http::get(&format!("{}api/v1/devices/{}", config.registry, device), config.token()?)
     }
 
-    fn list_all_devices(config: &mut Config) -> Result<()> {
+    fn list_all_devices(config: &mut Config) -> Result<Response> {
         debug!("listing all devices");
         Http::get(&format!("{}api/v1/devices", config.registry), config.token()?)
     }
 
-    fn create_group(config: &mut Config, name: &str) -> Result<()> {
+    fn create_group(config: &mut Config, name: &str) -> Result<Response> {
         debug!("creating device group {}", name);
         let req = Client::new()
             .post(&format!("{}api/v1/device_groups", config.registry))
@@ -88,7 +90,7 @@ impl RegistryApi for Registry {
         Http::send(req, config.token()?)
     }
 
-    fn rename_group(config: &mut Config, group: Uuid, name: &str) -> Result<()> {
+    fn rename_group(config: &mut Config, group: Uuid, name: &str) -> Result<Response> {
         debug!("renaming group {} to {}", group, name);
         let req = Client::new()
             .put(&format!("{}api/v1/device_groups/{}/rename", config.registry, group))
@@ -97,7 +99,7 @@ impl RegistryApi for Registry {
         Http::send(req, config.token()?)
     }
 
-    fn add_to_group(config: &mut Config, group: Uuid, device: Uuid) -> Result<()> {
+    fn add_to_group(config: &mut Config, group: Uuid, device: Uuid) -> Result<Response> {
         debug!("adding device {} to group {}", device, group);
         let req = Client::new()
             .post(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, group, device))
@@ -106,7 +108,7 @@ impl RegistryApi for Registry {
         Http::send(req, config.token()?)
     }
 
-    fn remove_from_group(config: &mut Config, group: Uuid, device: Uuid) -> Result<()> {
+    fn remove_from_group(config: &mut Config, group: Uuid, device: Uuid) -> Result<Response> {
         debug!("removing device {} from group {}", device, group);
         let req = Client::new()
             .delete(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, group, device))
@@ -115,17 +117,17 @@ impl RegistryApi for Registry {
         Http::send(req, config.token()?)
     }
 
-    fn list_devices(config: &mut Config, group: Uuid) -> Result<()> {
+    fn list_devices(config: &mut Config, group: Uuid) -> Result<Response> {
         debug!("listing devices in group {}", group);
         Http::get(&format!("{}api/v1/device_groups/{}/devices", config.registry, group), config.token()?)
     }
 
-    fn list_groups(config: &mut Config, device: Uuid) -> Result<()> {
+    fn list_groups(config: &mut Config, device: Uuid) -> Result<Response> {
         debug!("listing groups for device {}", device);
         Http::get(&format!("{}api/v1/devices/{}/groups", config.registry, device), config.token()?)
     }
 
-    fn list_all_groups(config: &mut Config) -> Result<()> {
+    fn list_all_groups(config: &mut Config) -> Result<Response> {
         debug!("listing all groups");
         Http::get(&format!("{}api/v1/device_groups", config.registry), config.token()?)
     }
