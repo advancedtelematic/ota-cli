@@ -51,7 +51,7 @@ impl CampaignerApi for Campaigner {
     fn create_campaign(config: &mut Config, update: Uuid, name: &str, groups: &[Uuid]) -> Result<Response> {
         debug!("creating campaign {} with update {} for groups: {:?}", name, update, groups);
         let req = Client::new()
-            .get(&format!("{}api/v2/campaigns", config.campaigner))
+            .post(&format!("{}api/v2/campaigns", config.campaigner))
             .json(&json!({"update": format!("{}", update), "name": name, "groups": groups}))
             .build()?;
         Http::send(req, config.token()?)
@@ -67,7 +67,7 @@ impl CampaignerApi for Campaigner {
 
     fn cancel_campaign(config: &mut Config, campaign: Uuid) -> Result<Response> {
         debug!("cancelling campaign {}", campaign);
-        Http::get(&format!("{}api/v2/campaigns/{}/cancel", config.campaigner, campaign), config.token()?)
+        Http::post(&format!("{}api/v2/campaigns/{}/cancel", config.campaigner, campaign), config.token()?)
     }
 
     fn list_campaign_info(config: &mut Config, campaign: Uuid) -> Result<Response> {

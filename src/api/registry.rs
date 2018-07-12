@@ -60,8 +60,8 @@ impl RegistryApi for Registry {
     fn create_device(config: &mut Config, name: &str, id: &str, kind: DeviceType) -> Result<Response> {
         debug!("creating device {} of type {} with id {}", name, kind, id);
         let req = Client::new()
-            .put(&format!("{}api/v1/devices", config.registry))
-            .query(&[("deviceName", name), ("deviceId", id), ("kind", &format!("{}", kind))])
+            .post(&format!("{}api/v1/devices", config.registry))
+            .query(&[("deviceName", name), ("deviceId", id), ("deviceType", &format!("{}", kind))])
             .build()?;
         Http::send(req, config.token()?)
     }

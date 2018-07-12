@@ -33,8 +33,8 @@ impl DirectorApi for Director {
     fn create_mtu(config: &mut Config, updates: &TufUpdates) -> Result<Response> {
         debug!("creating multi-target update: {:?}", updates);
         let req = Client::new()
-            .get(&format!("{}api/v1/multi_target_updates", config.director))
-            .json(&json!(updates))
+            .post(&format!("{}api/v1/multi_target_updates", config.director))
+            .json(updates)
             .build()?;
         Http::send(req, config.token()?)
     }
@@ -110,14 +110,14 @@ pub struct TufTarget {
 /// An update request for each `EcuSerial` to a `TufUpdate` target.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TufUpdates {
-    pub updates: HashMap<HardwareId, TufUpdate>,
+    pub targets: HashMap<HardwareId, TufUpdate>,
 }
 
 impl TufUpdates {
     /// Convert `TargetRequests` to `TufUpdates`.
-    pub fn from(targets: TargetRequests) -> Self {
+    pub fn from(requests: TargetRequests) -> Self {
         Self {
-            updates: targets.requests.into_iter().map(|(id, req)| (id, Self::to_update(req))).collect(),
+            targets: requests.requests.into_iter().map(|(id, req)| (id, Self::to_update(req))).collect(),
         }
     }
 
@@ -237,7 +237,7 @@ mod tests {
     #[test]
     fn parse_example_targets() {
         let requests = TargetRequests::from_file("examples/targets.toml").expect("parse toml");
-        let updates = TufUpdates::from(requests).updates;
+        let updates = TufUpdates::from(requests).targets;
         assert_eq!(updates.len(), 2);
 
         if let Some(req) = updates.get("some-ecu-type") {
