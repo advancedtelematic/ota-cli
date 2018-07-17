@@ -1,0 +1,30 @@
+# specify each hardware identifier in square brackets
+[some-ecu-type]
+target_format = "binary"
+generate_diff = true
+
+# optionally match `from` version before updating
+[some-ecu-type.from]
+name = "somefile"
+version = "1.0.1"
+length = 1024
+hash = "abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd"
+method = "sha256"
+
+# required metadata specifying update target
+[some-ecu-type.to]
+name = "somefile"
+version = "1.0.2"
+length = 1025
+hash = "abcd012345678901234567890123456789012345678901234567890123456789"
+method = "sha256"
+
+
+# specify a new ECU update with the minimum required fields
+["another ecu type"]
+target_format = "ostree"
+
+# sets `length` to 0, `hash` to the value of `version`, and method to `sha256`)
+["another ecu type".to]
+name = "my-branch"
+version = "012345678901234567890123456789012345678901234567890123456789abcd"

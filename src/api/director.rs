@@ -1,154 +1,177 @@
-use reqwest::{header::{Authorization, Bearer, Headers},
-              Client};
-use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
-use std::{self,
-          collections::HashMap,
-          fmt::{self, Display, Formatter},
-          str::FromStr};
-use url::Url;
+use clap::ArgMatches;
+use reqwest::{Client, Response};
+use serde::{self, Deserialize, Deserializer};
+use std::{
+    collections::HashMap,
+    fmt::{self, Display, Formatter},
+    fs,
+    path::Path,
+    result,
+    str::FromStr,
+};
+use toml;
 use uuid::Uuid;
 
-use api::auth_plus::Token;
+use config::Config;
 use error::{Error, Result};
-use util::print_resp;
+use http::{Http, HttpMethods};
+
 
 /// Available director API methods.
-pub trait Director {
+pub trait DirectorApi {
     /// Create a new multi-target update.
-    fn create_mtu(&self, targets: &UpdateTargets) -> Result<Uuid>;
-    /// Launch a previously created multi-target update.
-    fn launch_mtu(&self, device_id: Uuid, update_id: Uuid) -> Result<()>;
+    fn create_mtu(&mut Config, updates: &TufUpdates) -> Result<Response>;
+    /// Launch a multi-target update for a device.
+    fn launch_mtu(&mut Config, update: Uuid, device: Uuid) -> Result<Response>;
 }
 
-/// Handle API calls to director to launch multi-target updates.
-pub struct DirectorHandler<'c> {
-    client: &'c Client,
-    server: Url,
-    token: Token,
-}
 
-impl<'c> DirectorHandler<'c> {
-    pub fn new(client: &'c Client, server: Url, token: Token) -> Self {
-        DirectorHandler { client, server, token }
+/// Make API calls to launch multi-target updates.
+pub struct Director;
+
+impl DirectorApi for Director {
+    fn create_mtu(config: &mut Config, updates: &TufUpdates) -> Result<Response> {
+        debug!("creating multi-target update: {:?}", updates);
+        let req = Client::new()
+            .post(&format!("{}api/v1/multi_target_updates", config.director))
+            .json(updates)
+            .build()?;
+        Http::send(req, config.token()?)
     }
 
-    fn auth(&self) -> Result<Headers> {
-        let mut headers = Headers::new();
-        if let Some(resp) = (self.token)()? {
-            headers.set(Authorization(Bearer {
-                token: resp.access_token,
-            }));
-        }
-        Ok(headers)
+    fn launch_mtu(config: &mut Config, update: Uuid, device: Uuid) -> Result<Response> {
+        debug!("launching multi-target update {} for device {}", update, device);
+        let url = format!("{}api/v1/admin/devices/{}/multi_target_update/{}", config.director, device, update);
+        Http::put(&url, config.token()?)
     }
 }
 
-impl<'c> Director for DirectorHandler<'c> {
-    fn create_mtu(&self, targets: &UpdateTargets) -> Result<Uuid> {
-        debug!("creating multi-target update: {:?}", targets);
-        Ok(self.client
-            .post(&format!("{}api/v1/multi_target_updates", self.server))
-            .json(targets)
-            .headers(self.auth()?)
-            .send()?
-            .json()?)
-    }
 
-    fn launch_mtu(&self, device_id: Uuid, update_id: Uuid) -> Result<()> {
-        self.client
-            .put(&format!(
-                "{}api/v1/admin/devices/{}/multi_target_update/{}",
-                self.server, device_id, update_id
-            ))
-            .headers(self.auth()?)
-            .send()
-            .map_err(Error::Http)
-            .and_then(print_resp)
-    }
-}
+/// An identifier for the type of hardware and applicable `Target`s.
+type HardwareId = String;
 
-/// An update targetting a specific type of hardware.
+/// Metadata describing an object that can be applied to an ECU.
 #[derive(Serialize, Deserialize)]
-pub struct Target {
-    pub hw_id: String,
-    pub target: String,
-    pub length: u64,
-    pub method: ChecksumMethod,
-    pub hash: String,
+pub struct TargetObject {
+    pub name:    String,
+    pub version: String,
+    pub length:  Option<u64>,
+    pub hash:    Option<String>,
+    pub method:  Option<ChecksumMethod>,
 }
 
-/// A set of update targets for a specific `Device`.
-#[derive(Deserialize)]
-pub struct Targets {
-    pub device: Device,
-    pub targets: Vec<Target>,
+/// A request to update some hardware type to a new `TargetObject`.
+#[derive(Serialize, Deserialize)]
+pub struct TargetRequest {
+    pub target_format: TargetFormat,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generate_diff: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<TargetObject>,
+    pub to: TargetObject,
 }
 
-/// An identifier for a specific device.
-#[derive(Deserialize)]
-pub struct Device {
-    pub device_id: Uuid,
+/// Parsed mapping from hardware identifiers to target requests.
+#[derive(Serialize, Deserialize)]
+pub struct TargetRequests {
+    pub requests: HashMap<HardwareId, TargetRequest>,
 }
 
-/// A mapping from hardware identifier's to a new `Update`.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct UpdateTargets {
-    pub targets: HashMap<String, Update>,
-}
-
-impl UpdateTargets {
-    /// Convert a list of `Target`s to `UpdateTargets`.
-    pub fn from(targets: &[Target], format: TargetFormat, generate_diff: bool) -> Self {
-        let to_update = |target: &Target| Update {
-            from: None,
-            to: UpdateTarget {
-                target: target.target.clone(),
-                length: target.length,
-                checksum: Checksum {
-                    method: target.method,
-                    hash: target.hash.clone(),
-                },
-            },
-            format: format,
-            generate_diff: generate_diff,
-        };
-
-        UpdateTargets {
-            targets: targets
-                .into_iter()
-                .map(|target| (target.hw_id.clone(), to_update(&target)))
-                .collect::<HashMap<String, Update>>(),
-        }
+impl TargetRequests {
+    /// Parse a toml file into `TargetRequests`.
+    pub fn from_file(input: impl AsRef<Path>) -> Result<Self> {
+        let requests = toml::from_str(&fs::read_to_string(input)?)?;
+        Ok(Self { requests })
     }
 }
 
-/// Update an ECU to a specific `UpdateTarget`.
+
+/// A request to update an ECU to a specific `TufTarget`.
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Update {
-    pub from: Option<UpdateTarget>,
-    pub to: UpdateTarget,
+pub struct TufUpdate {
     #[serde(rename = "targetFormat")]
     pub format: TargetFormat,
     #[serde(rename = "generateDiff")]
     pub generate_diff: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<TufTarget>,
+    pub to: TufTarget,
 }
 
+/// A TUF target for an ECU.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TufTarget {
+    pub target: String,
+    #[serde(rename = "targetLength")]
+    pub length: u64,
+    pub checksum: Checksum,
+}
+
+/// An update request for each `EcuSerial` to a `TufUpdate` target.
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TufUpdates {
+    pub targets: HashMap<HardwareId, TufUpdate>,
+}
+
+impl TufUpdates {
+    /// Convert `TargetRequests` to `TufUpdates`.
+    pub fn from(requests: TargetRequests) -> Self {
+        Self {
+            targets: requests.requests.into_iter().map(|(id, req)| (id, Self::to_update(req))).collect(),
+        }
+    }
+
+    fn to_update(request: TargetRequest) -> TufUpdate {
+        TufUpdate {
+            format: request.target_format,
+            generate_diff: request.generate_diff.unwrap_or(false),
+            from: if let Some(from) = request.from { Some(Self::to_target(from)) } else { None },
+            to: Self::to_target(request.to),
+        }
+    }
+
+    fn to_target(target: TargetObject) -> TufTarget {
+        TufTarget {
+            target:   format!("{}-{}", target.name, target.version),
+            length:   target.length.unwrap_or(0),
+            checksum: Checksum {
+                method: target.method.unwrap_or(ChecksumMethod::Sha256),
+                hash:   target.hash.unwrap_or(target.version),
+            },
+        }
+    }
+}
+
+
 /// Available target types.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Clone, Copy, Debug, Eq, PartialEq)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum TargetFormat {
     Binary,
     Ostree,
 }
 
+impl<'a> TargetFormat {
+    /// Parse CLI arguments into a `TargetFormat`.
+    pub fn from_flags(flags: &ArgMatches<'a>) -> Result<Self> {
+        if flags.is_present("binary") {
+            Ok(TargetFormat::Binary)
+        } else if flags.is_present("ostree") {
+            Ok(TargetFormat::Ostree)
+        } else {
+            Err(Error::Flag("Either --binary or --ostree flag is required".into()))
+        }
+    }
+}
+
 impl FromStr for TargetFormat {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        match s.to_uppercase().as_ref() {
-            "BINARY" => Ok(TargetFormat::Binary),
-            "OSTREE" => Ok(TargetFormat::Ostree),
-            _ => Err(Error::TargetFormat(s.into())),
+        match s.to_lowercase().as_ref() {
+            "binary" => Ok(TargetFormat::Binary),
+            "ostree" => Ok(TargetFormat::Ostree),
+            _ => Err(Error::Parse(format!("unknown `TargetFormat`: {}", s))),
         }
     }
 }
@@ -163,24 +186,24 @@ impl Display for TargetFormat {
     }
 }
 
-/// The update target for a ECU.
-#[derive(Serialize, Deserialize, Debug)]
-pub struct UpdateTarget {
-    pub target: String,
-    #[serde(rename = "targetLength")]
-    pub length: u64,
-    pub checksum: Checksum,
+impl<'de> Deserialize<'de> for TargetFormat {
+    fn deserialize<D: Deserializer<'de>>(de: D) -> result::Result<Self, D::Error> {
+        let s: String = Deserialize::deserialize(de)?;
+        s.parse().map_err(|err| serde::de::Error::custom(format!("{}", err)))
+    }
 }
 
-/// The checksum hash for an `UpdateTarget`.
+
+/// The checksum hash for a `TufTarget`.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Checksum {
     pub method: ChecksumMethod,
-    pub hash: String,
+    pub hash:   String,
 }
 
 /// Available checksum methods for target metadata verification.
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(Serialize, Clone, Copy, Debug, Eq, PartialEq)]
+#[serde(rename_all = "lowercase")]
 pub enum ChecksumMethod {
     Sha256,
     Sha512,
@@ -193,23 +216,54 @@ impl FromStr for ChecksumMethod {
         match s.to_lowercase().as_ref() {
             "sha256" => Ok(ChecksumMethod::Sha256),
             "sha512" => Ok(ChecksumMethod::Sha512),
-            _ => Err(Error::Checksum(s.into())),
+            _ => Err(Error::Parse(format!("unknown `ChecksumMethod`: {}", s))),
         }
     }
 }
 
-impl Serialize for ChecksumMethod {
-    fn serialize<S: Serializer>(&self, ser: S) -> std::result::Result<S::Ok, S::Error> {
-        ser.serialize_str(match *self {
-            ChecksumMethod::Sha256 => "sha256",
-            ChecksumMethod::Sha512 => "sha512",
-        })
+impl<'de> Deserialize<'de> for ChecksumMethod {
+    fn deserialize<D: Deserializer<'de>>(de: D) -> result::Result<Self, D::Error> {
+        let s: String = Deserialize::deserialize(de)?;
+        s.parse().map_err(|err| serde::de::Error::custom(format!("{}", err)))
     }
 }
 
-impl<'de> Deserialize<'de> for ChecksumMethod {
-    fn deserialize<D: Deserializer<'de>>(de: D) -> std::result::Result<Self, D::Error> {
-        let s: String = Deserialize::deserialize(de)?;
-        s.parse().map_err(|err| serde::de::Error::custom(format!("{}", err)))
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
+    #[test]
+    fn parse_example_targets() {
+        let requests = TargetRequests::from_file("examples/targets.toml").expect("parse toml");
+        let updates = TufUpdates::from(requests).targets;
+        assert_eq!(updates.len(), 2);
+
+        if let Some(req) = updates.get("some-ecu-type") {
+            assert_eq!(req.format, TargetFormat::Binary);
+            assert_eq!(req.generate_diff, true);
+            if let Some(ref from) = req.from {
+                assert_eq!(from.target, "somefile-1.0.1");
+            } else {
+                panic!("missing `from` section")
+            }
+            assert_eq!(req.to.target, "somefile-1.0.2");
+            assert_eq!(req.to.checksum.hash, "abcd012345678901234567890123456789012345678901234567890123456789");
+            assert_eq!(req.to.checksum.method, ChecksumMethod::Sha256);
+        } else {
+            panic!("some-ecu-type not found");
+        }
+
+        if let Some(req) = updates.get("another ecu type") {
+            assert_eq!(req.format, TargetFormat::Ostree);
+            assert_eq!(req.generate_diff, false);
+            assert!(req.from.is_none());
+            assert_eq!(req.to.target, "my-branch-012345678901234567890123456789012345678901234567890123456789abcd");
+            assert_eq!(req.to.checksum.hash, "012345678901234567890123456789012345678901234567890123456789abcd");
+            assert_eq!(req.to.checksum.method, ChecksumMethod::Sha256);
+        } else {
+            panic!("another-ecu-type not found");
+        }
     }
 }
