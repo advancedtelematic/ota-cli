@@ -201,7 +201,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
        */
 
         (@subcommand add =>
-          (about: "Add a new package")
+          (about: "Add a single package")
           (setting: AppSettings::ArgRequiredElseHelp)
           (setting: AppSettings::DeriveDisplayOrder)
           (setting: AppSettings::UnifiedHelpMessage)
@@ -221,6 +221,14 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg name: -n --name <name> "The package name")
           (@arg version: -v --version <version> "The package version")
         )
+
+        (@subcommand upload =>
+          (about: "Upload multiple packages")
+          (setting: AppSettings::ArgRequiredElseHelp)
+          (setting: AppSettings::DeriveDisplayOrder)
+          (setting: AppSettings::UnifiedHelpMessage)
+          (@arg packages: -p --packages <toml> "Package metadata file")
+        )
       )
 
       (@subcommand update =>
@@ -229,7 +237,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (setting: AppSettings::DeriveDisplayOrder)
         (setting: AppSettings::InferSubcommands)
         (setting: AppSettings::UnifiedHelpMessage)
- 
+
         (@subcommand create =>
           (about: "Create a multi-target update")
           (setting: AppSettings::ArgRequiredElseHelp)

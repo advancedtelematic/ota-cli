@@ -35,7 +35,7 @@ pub struct Registry;
 impl<'a> Registry {
     /// Parse CLI arguments into device listing preferences.
     pub fn list_device_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<Response> {
-        #[cfg_attr(rustfmt, rustfmt_skip)] 
+        #[cfg_attr(rustfmt, rustfmt_skip)]
         match parse_list_flags(flags)? {
             (true, _, _)         => Self::list_all_devices(config),
             (_, Some(device), _) => Self::list_device(config, device),
@@ -46,7 +46,7 @@ impl<'a> Registry {
 
     /// Parse CLI arguments into group listing preferences.
     pub fn list_group_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<Response> {
-        #[cfg_attr(rustfmt, rustfmt_skip)] 
+        #[cfg_attr(rustfmt, rustfmt_skip)]
         match parse_list_flags(flags)? {
             (true, _, _)         => Self::list_all_groups(config),
             (_, Some(device), _) => Self::list_groups(config, device),

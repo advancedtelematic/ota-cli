@@ -18,7 +18,9 @@ pub trait HttpMethods {
     fn get(url: impl AsRef<str>, token: Option<AccessToken>) -> Result<Response> { Http::send(Request::new(Method::Get, Url::parse(url.as_ref())?), token) }
     fn post(url: impl AsRef<str>, token: Option<AccessToken>) -> Result<Response> { Http::send(Request::new(Method::Post, Url::parse(url.as_ref())?), token) }
     fn put(url: impl AsRef<str>, token: Option<AccessToken>) -> Result<Response> { Http::send(Request::new(Method::Put, Url::parse(url.as_ref())?), token) }
-    fn delete(url: impl AsRef<str>, token: Option<AccessToken>) -> Result<Response> { Http::send(Request::new(Method::Delete, Url::parse(url.as_ref())?), token) }
+    fn delete(url: impl AsRef<str>, token: Option<AccessToken>) -> Result<Response> {
+        Http::send(Request::new(Method::Delete, Url::parse(url.as_ref())?), token)
+    }
 }
 
 /// Make HTTP requests to server endpoints.
@@ -58,7 +60,7 @@ impl Http {
         let _ = resp.read_to_end(&mut body)?;
         debug!("response headers:\n{}", resp.headers());
 
-        #[cfg_attr(rustfmt, rustfmt_skip)] 
+        #[cfg_attr(rustfmt, rustfmt_skip)]
         match serde_json::from_slice::<Value>(&body) {
             Ok(json) => print_bytes(serde_json::to_string_pretty(&json)?),
             Err(_)   => print_bytes(body),

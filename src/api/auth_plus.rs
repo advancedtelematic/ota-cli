@@ -21,7 +21,7 @@ pub struct AuthPlus;
 impl AuthPlusApi for AuthPlus {
     fn refresh_token(config: &mut Config) -> Result<Option<AccessToken>> {
         if let Some(oauth2) = config.credentials()?.oauth2()? {
-            debug!("fetching access token from auth-plus: {}", oauth2.server);
+            debug!("fetching access token from auth-plus server {}", oauth2.server);
             let req = Client::new()
                 .post(&format!("{}/token", oauth2.server))
                 .basic_auth(oauth2.client_id, Some(oauth2.client_secret))
@@ -30,6 +30,7 @@ impl AuthPlusApi for AuthPlus {
                 .build()?;
             Ok(Some(Http::send(req, None)?.json()?))
         } else {
+            debug!("skipping oauth2 authentication...");
             Ok(None)
         }
     }

@@ -92,11 +92,12 @@ impl<'a> Config {
 
     /// Refresh an `AccessToken` or return existing.
     pub fn token(&mut self) -> Result<Option<AccessToken>> {
-        if let None = self.token {
-            if let Some(token) = AuthPlus::refresh_token(self)? {
+        match self.token {
+            Some(_) => debug!("using cached access token..."),
+            None => if let Some(token) = AuthPlus::refresh_token(self)? {
                 self.token = Some(token);
                 self.save_default()?;
-            }
+            },
         }
         Ok(self.token.clone())
     }

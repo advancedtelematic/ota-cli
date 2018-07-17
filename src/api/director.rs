@@ -63,12 +63,10 @@ pub struct TargetObject {
 /// A request to update some hardware type to a new `TargetObject`.
 #[derive(Serialize, Deserialize)]
 pub struct TargetRequest {
-    pub target_format: TargetFormat,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_format: Option<TargetFormat>,
+    pub from:          Option<TargetObject>,
+    pub to:            TargetObject,
     pub generate_diff: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub from: Option<TargetObject>,
-    pub to: TargetObject,
 }
 
 /// Parsed mapping from hardware identifiers to target requests.
@@ -91,11 +89,11 @@ impl TargetRequests {
 pub struct TufUpdate {
     #[serde(rename = "targetFormat")]
     pub format: TargetFormat,
-    #[serde(rename = "generateDiff")]
-    pub generate_diff: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<TufTarget>,
     pub to: TufTarget,
+    #[serde(rename = "generateDiff")]
+    pub generate_diff: bool,
 }
 
 /// A TUF target for an ECU.
@@ -123,10 +121,10 @@ impl TufUpdates {
 
     fn to_update(request: TargetRequest) -> TufUpdate {
         TufUpdate {
-            format: request.target_format,
+            format:        request.target_format.unwrap_or(TargetFormat::Ostree),
             generate_diff: request.generate_diff.unwrap_or(false),
-            from: if let Some(from) = request.from { Some(Self::to_target(from)) } else { None },
-            to: Self::to_target(request.to),
+            from:          if let Some(from) = request.from { Some(Self::to_target(from)) } else { None },
+            to:            Self::to_target(request.to),
         }
     }
 
