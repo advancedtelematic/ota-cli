@@ -1,13 +1,11 @@
-# upload a binary package named `foo` from a remote `url`
-[foo]
+# upload a package named `foo` with version `1` and contents at a remote `url`
+[foo.1]
 url = "https://acme.org/downloads/foo"
-version = "1"
 format = "binary"
 hardware = ["acme-ecu-1"]
 
-# upload an ostree package with metadata from a filesystem `path`
-[my-branch]
+# upload an ostree package with metadata contents at filesystem `path`
+[my-branch.1234]
 path = "/ota/my-branch-01234"
-version = "01234"
 format = "ostree"
 hardware = ["qemux86-64"]

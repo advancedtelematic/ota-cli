@@ -33,7 +33,7 @@ pub enum Error {
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        #[cfg_attr(rustfmt, rustfmt_skip)] 
+        #[cfg_attr(rustfmt, rustfmt_skip)]
         let output = match self {
             Error::Auth(err)    => format!("Authorization: {}", err),
             Error::Command(err) => format!("Command input: {}", err),
