@@ -23,10 +23,10 @@ pub struct Reposerver;
 
 impl ReposerverApi for Reposerver {
     fn add_package(config: &mut Config, package: TufPackage) -> Result<Response> {
-        let filepath = format!("{}-{}", package.name, package.version);
-        debug!("adding package with filepath {}", filepath);
+        let entry = format!("{}_{}", package.name, package.version);
+        debug!("adding package with entry name {}", entry);
         let req = Client::new()
-            .put(&format!("{}api/v1/user_repo/targets/{}", config.reposerver, filepath))
+            .put(&format!("{}api/v1/user_repo/targets/{}", config.reposerver, entry))
             .query(&[
                 ("name", urlencoding::encode(&package.name)),
                 ("version", urlencoding::encode(&package.version)),
@@ -42,9 +42,9 @@ impl ReposerverApi for Reposerver {
     }
 
     fn get_package(config: &mut Config, name: &str, version: &str) -> Result<Response> {
-        let filepath = format!("{}-{}", name, version);
-        debug!("fetching package with filepath {}", filepath);
-        Http::get(&format!("{}api/v1/user_repo/targets/{}", config.reposerver, filepath), config.token()?)
+        let entry = format!("{}_{}", name, version);
+        debug!("fetching package with entry name {}", entry);
+        Http::get(&format!("{}api/v1/user_repo/targets/{}", config.reposerver, entry), config.token()?)
     }
 }
 
