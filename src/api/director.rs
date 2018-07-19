@@ -113,30 +113,43 @@ pub struct TufUpdates {
 
 impl TufUpdates {
     /// Convert `TargetRequests` to `TufUpdates`.
-    pub fn from(requests: TargetRequests) -> Self {
-        Self {
-            targets: requests.requests.into_iter().map(|(id, req)| (id, Self::to_update(req))).collect(),
-        }
+    pub fn from(requests: TargetRequests) -> Result<Self> {
+        Ok(Self {
+            targets: requests
+                .requests
+                .into_iter()
+                .map(|(id, req)| Ok((id, Self::to_update(req)?)))
+                .collect::<Result<HashMap<_, _>>>()?,
+        })
     }
 
-    fn to_update(request: TargetRequest) -> TufUpdate {
-        TufUpdate {
-            format:        request.target_format.unwrap_or(TargetFormat::Ostree),
+    fn to_update(request: TargetRequest) -> Result<TufUpdate> {
+        let format = request.target_format.unwrap_or(TargetFormat::Ostree);
+        Ok(TufUpdate {
+            format,
             generate_diff: request.generate_diff.unwrap_or(false),
-            from:          if let Some(from) = request.from { Some(Self::to_target(from)) } else { None },
-            to:            Self::to_target(request.to),
-        }
+            from: if let Some(from) = request.from {
+                Some(Self::to_target(format, from)?)
+            } else {
+                None
+            },
+            to: Self::to_target(format, request.to)?,
+        })
     }
 
-    fn to_target(target: TargetObject) -> TufTarget {
-        TufTarget {
-            target:   format!("{}-{}", target.name, target.version),
-            length:   target.length.unwrap_or(0),
+    fn to_target(format: TargetFormat, target: TargetObject) -> Result<TufTarget> {
+        let length = target.length.unwrap_or(0);
+        if format == TargetFormat::Binary && length == 0 {
+            Err(Error::Parse("binary target length cannot be 0".into()))?
+        }
+        Ok(TufTarget {
+            target: format!("{}_{}", target.name, target.version),
+            length,
             checksum: Checksum {
                 method: target.method.unwrap_or(ChecksumMethod::Sha256),
                 hash:   target.hash.unwrap_or(target.version),
             },
-        }
+        })
     }
 }
 
@@ -235,18 +248,18 @@ mod tests {
     #[test]
     fn parse_example_targets() {
         let requests = TargetRequests::from_file("examples/targets.toml").expect("parse toml");
-        let updates = TufUpdates::from(requests).targets;
+        let updates = TufUpdates::from(requests).expect("targets").targets;
         assert_eq!(updates.len(), 2);
 
         if let Some(req) = updates.get("some-ecu-type") {
             assert_eq!(req.format, TargetFormat::Binary);
             assert_eq!(req.generate_diff, true);
             if let Some(ref from) = req.from {
-                assert_eq!(from.target, "somefile-1.0.1");
+                assert_eq!(from.target, "somefile_1.0.1");
             } else {
                 panic!("missing `from` section")
             }
-            assert_eq!(req.to.target, "somefile-1.0.2");
+            assert_eq!(req.to.target, "somefile_1.0.2");
             assert_eq!(req.to.checksum.hash, "abcd012345678901234567890123456789012345678901234567890123456789");
             assert_eq!(req.to.checksum.method, ChecksumMethod::Sha256);
         } else {
@@ -257,7 +270,7 @@ mod tests {
             assert_eq!(req.format, TargetFormat::Ostree);
             assert_eq!(req.generate_diff, false);
             assert!(req.from.is_none());
-            assert_eq!(req.to.target, "my-branch-012345678901234567890123456789012345678901234567890123456789abcd");
+            assert_eq!(req.to.target, "my-branch_012345678901234567890123456789012345678901234567890123456789abcd");
             assert_eq!(req.to.checksum.hash, "012345678901234567890123456789012345678901234567890123456789abcd");
             assert_eq!(req.to.checksum.method, ChecksumMethod::Sha256);
         } else {

@@ -244,7 +244,7 @@ impl<'a> HttpRequest<'a> for Update {
         let targets = || flags.value_of("targets").expect("--targets");
 
         match self {
-            Update::Create => Director::create_mtu(&mut config, &TufUpdates::from(TargetRequests::from_file(targets())?)),
+            Update::Create => Director::create_mtu(&mut config, &TufUpdates::from(TargetRequests::from_file(targets())?)?),
             Update::Launch => Director::launch_mtu(&mut config, update()?, device()?),
         }
     }
