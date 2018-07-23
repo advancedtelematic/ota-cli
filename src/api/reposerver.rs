@@ -99,13 +99,13 @@ pub struct TufPackage {
 
 impl<'a> TufPackage {
     /// Parse CLI arguments into a `TufPackage`.
-    pub fn from_flags(flags: &ArgMatches<'a>) -> Result<Self> {
+    pub fn from_args(args: &ArgMatches<'a>) -> Result<Self> {
         Ok(TufPackage {
-            name:     flags.value_of("name").expect("--name").into(),
-            version:  flags.value_of("version").expect("--version").into(),
-            format:   TargetFormat::from_flags(&flags)?,
-            hardware: flags.values_of("hardware").expect("--hardware").map(String::from).collect(),
-            target:   RepoTarget::from_flags(&flags)?,
+            name:     args.value_of("name").expect("--name").into(),
+            version:  args.value_of("version").expect("--version").into(),
+            format:   TargetFormat::from_args(&args)?,
+            hardware: args.values_of("hardware").expect("--hardware").map(String::from).collect(),
+            target:   RepoTarget::from_args(&args)?,
         })
     }
 }
@@ -164,13 +164,13 @@ pub enum RepoTarget {
 }
 
 impl<'a> RepoTarget {
-    pub fn from_flags(flags: &ArgMatches<'a>) -> Result<Self> {
-        if let Some(path) = flags.value_of("path") {
+    pub fn from_args(args: &ArgMatches<'a>) -> Result<Self> {
+        if let Some(path) = args.value_of("path") {
             Ok(RepoTarget::Path(path.into()))
-        } else if let Some(url) = flags.value_of("url") {
+        } else if let Some(url) = args.value_of("url") {
             Ok(RepoTarget::Url(url.parse()?))
         } else {
-            Err(Error::Flag("Either --path or --url flag is required".into()))
+            Err(Error::Args("Either --path or --url flag is required".into()))
         }
     }
 }

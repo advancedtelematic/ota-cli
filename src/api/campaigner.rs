@@ -23,10 +23,10 @@ pub struct Campaigner;
 
 impl<'a> Campaigner {
     /// Parse CLI arguments to create a new campaign.
-    pub fn create_from_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<Response> {
-        let update = flags.value_of("update").expect("--update").parse()?;
-        let name = flags.value_of("name").expect("--name");
-        let groups = flags
+    pub fn create_from_args(config: &mut Config, args: &ArgMatches<'a>) -> Result<Response> {
+        let update = args.value_of("update").expect("--update").parse()?;
+        let name = args.value_of("name").expect("--name");
+        let groups = args
             .values_of("groups")
             .expect("--groups")
             .map(Uuid::parse_str)
@@ -35,11 +35,11 @@ impl<'a> Campaigner {
     }
 
     /// Parse CLI arguments to list campaign information.
-    pub fn list_from_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<Response> {
-        let campaign = || flags.value_of("campaign").expect("--campaign flag").parse();
-        if flags.is_present("all") {
+    pub fn list_from_args(config: &mut Config, args: &ArgMatches<'a>) -> Result<Response> {
+        let campaign = || args.value_of("campaign").expect("--campaign flag").parse();
+        if args.is_present("all") {
             Self::list_all_campaigns(config)
-        } else if flags.is_present("stats") {
+        } else if args.is_present("stats") {
             Self::list_campaign_stats(config, campaign()?)
         } else {
             Self::list_campaign_info(config, campaign()?)

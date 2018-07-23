@@ -38,11 +38,11 @@ pub struct Config {
 
 impl<'a> Config {
     /// Initialize a new config from CLI arguments.
-    pub fn init_from_flags(flags: &ArgMatches<'a>) -> Result<()> {
-        let credentials: PathBuf = flags.value_of("credentials").expect("--credentials").into();
-        let campaigner = flags.value_of("campaigner").expect("--campaigner").parse()?;
-        let director = flags.value_of("director").expect("--director").parse()?;
-        let registry = flags.value_of("registry").expect("--registry").parse()?;
+    pub fn init_from_args(args: &ArgMatches<'a>) -> Result<()> {
+        let credentials: PathBuf = args.value_of("credentials").expect("--credentials").into();
+        let campaigner = args.value_of("campaigner").expect("--campaigner").parse()?;
+        let director = args.value_of("director").expect("--director").parse()?;
+        let registry = args.value_of("registry").expect("--registry").parse()?;
         Self::init(credentials, campaigner, director, registry)
     }
 

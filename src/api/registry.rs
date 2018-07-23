@@ -33,25 +33,25 @@ pub trait RegistryApi {
 pub struct Registry;
 
 impl<'a> Registry {
-    /// Parse CLI arguments into device listing preferences.
-    pub fn list_device_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<Response> {
+    /// Parse args as device listing preferences.
+    pub fn list_device_args(config: &mut Config, args: &ArgMatches<'a>) -> Result<Response> {
         #[cfg_attr(rustfmt, rustfmt_skip)]
-        match parse_list_flags(flags)? {
+        match parse_list_args(args)? {
             (true, _, _)         => Self::list_all_devices(config),
             (_, Some(device), _) => Self::list_device(config, device),
             (_, _, Some(group))  => Self::list_devices(config, group),
-            _ => Err(Error::Flag("one of --all, --device, or --group required".into())),
+            _ => Err(Error::Args("one of --all, --device, or --group required".into())),
         }
     }
 
-    /// Parse CLI arguments into group listing preferences.
-    pub fn list_group_flags(config: &mut Config, flags: &ArgMatches<'a>) -> Result<Response> {
+    /// Parse args as group listing preferences.
+    pub fn list_group_args(config: &mut Config, args: &ArgMatches<'a>) -> Result<Response> {
         #[cfg_attr(rustfmt, rustfmt_skip)]
-        match parse_list_flags(flags)? {
+        match parse_list_args(args)? {
             (true, _, _)         => Self::list_all_groups(config),
             (_, Some(device), _) => Self::list_groups(config, device),
             (_, _, Some(group))  => Self::list_devices(config, group),
-            _ => Err(Error::Flag("one of --all, --device, or --group required".into())),
+            _ => Err(Error::Args("one of --all, --device, or --group required".into())),
         }
     }
 }
@@ -143,13 +143,13 @@ pub enum DeviceType {
 
 impl<'a> DeviceType {
     /// Parse CLI arguments into a `DeviceType`.
-    pub fn from_flags(flags: &ArgMatches<'a>) -> Result<Self> {
-        if flags.is_present("vehicle") {
+    pub fn from_args(args: &ArgMatches<'a>) -> Result<Self> {
+        if args.is_present("vehicle") {
             Ok(DeviceType::Vehicle)
-        } else if flags.is_present("other") {
+        } else if args.is_present("other") {
             Ok(DeviceType::Other)
         } else {
-            Err(Error::Flag("Either --vehicle or --other flag is required".into()))
+            Err(Error::Args("Either --vehicle or --other flag is required".into()))
         }
     }
 }
@@ -158,9 +158,10 @@ impl FromStr for DeviceType {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
+        #[cfg_attr(rustfmt, rustfmt_skip)]
         match s.to_lowercase().as_ref() {
             "vehicle" => Ok(DeviceType::Vehicle),
-            "other" => Ok(DeviceType::Other),
+            "other"   => Ok(DeviceType::Other),
             _ => Err(Error::Parse(format!("unknown `DeviceType`: {}", s))),
         }
     }
@@ -168,19 +169,20 @@ impl FromStr for DeviceType {
 
 impl Display for DeviceType {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        #[cfg_attr(rustfmt, rustfmt_skip)]
         let text = match self {
             DeviceType::Vehicle => "Vehicle",
-            DeviceType::Other => "Other",
+            DeviceType::Other   => "Other",
         };
         write!(f, "{}", text)
     }
 }
 
 
-/// Parse into a tuple of --all, --device, and --group flags.
-fn parse_list_flags<'a>(flags: &ArgMatches<'a>) -> Result<(bool, Option<Uuid>, Option<Uuid>)> {
-    let all = flags.is_present("all");
-    let device = if let Some(val) = flags.value_of("device") { Some(val.parse()?) } else { None };
-    let group = if let Some(val) = flags.value_of("group") { Some(val.parse()?) } else { None };
+/// Parse into a tuple of --all, --device, and --group arg values.
+fn parse_list_args<'a>(args: &ArgMatches<'a>) -> Result<(bool, Option<Uuid>, Option<Uuid>)> {
+    let all = args.is_present("all");
+    let device = if let Some(val) = args.value_of("device") { Some(val.parse()?) } else { None };
+    let group = if let Some(val) = args.value_of("group") { Some(val.parse()?) } else { None };
     Ok((all, device, group))
 }

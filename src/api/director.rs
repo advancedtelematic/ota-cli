@@ -41,8 +41,10 @@ impl DirectorApi for Director {
 
     fn launch_mtu(config: &mut Config, update: Uuid, device: Uuid) -> Result<Response> {
         debug!("launching multi-target update {} for device {}", update, device);
-        let url = format!("{}api/v1/admin/devices/{}/multi_target_update/{}", config.director, device, update);
-        Http::put(&url, config.token()?)
+        Http::put(
+            &format!("{}api/v1/admin/devices/{}/multi_target_update/{}", config.director, device, update),
+            config.token()?,
+        )
     }
 }
 
@@ -78,8 +80,9 @@ pub struct TargetRequests {
 impl TargetRequests {
     /// Parse a toml file into `TargetRequests`.
     pub fn from_file(input: impl AsRef<Path>) -> Result<Self> {
-        let requests = toml::from_str(&fs::read_to_string(input)?)?;
-        Ok(Self { requests })
+        Ok(Self {
+            requests: toml::from_str(&fs::read_to_string(input)?)?,
+        })
     }
 }
 
@@ -119,7 +122,7 @@ impl TufUpdates {
                 .requests
                 .into_iter()
                 .map(|(id, req)| Ok((id, Self::to_update(req)?)))
-                .collect::<Result<HashMap<_, _>>>()?,
+                .collect::<Result<_>>()?,
         })
     }
 
@@ -164,13 +167,13 @@ pub enum TargetFormat {
 
 impl<'a> TargetFormat {
     /// Parse CLI arguments into a `TargetFormat`.
-    pub fn from_flags(flags: &ArgMatches<'a>) -> Result<Self> {
-        if flags.is_present("binary") {
+    pub fn from_args(args: &ArgMatches<'a>) -> Result<Self> {
+        if args.is_present("binary") {
             Ok(TargetFormat::Binary)
-        } else if flags.is_present("ostree") {
+        } else if args.is_present("ostree") {
             Ok(TargetFormat::Ostree)
         } else {
-            Err(Error::Flag("Either --binary or --ostree flag is required".into()))
+            Err(Error::Args("Either --binary or --ostree flag is required".into()))
         }
     }
 }

@@ -12,9 +12,9 @@ use config::Config;
 use error::{Error, Result};
 
 
-/// Execute an HTTP request.
-pub trait HttpRequest<'a> {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response>;
+/// Execute a command then handle the HTTP `Response`.
+pub trait Exec<'a> {
+    fn exec(&self, args: &ArgMatches<'a>, reply: impl FnOnce(Response) -> Result<()>) -> Result<()>;
 }
 
 
@@ -29,18 +29,18 @@ pub enum Command {
     Update,
 }
 
-impl<'a> HttpRequest<'a> for Command {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
-        let (cmd, args) = flags.subcommand();
+impl<'a> Exec<'a> for Command {
+    fn exec(&self, args: &ArgMatches<'a>, reply: impl FnOnce(Response) -> Result<()>) -> Result<()> {
+        let (cmd, args) = args.subcommand();
         let args = args.expect("sub-command args");
         #[cfg_attr(rustfmt, rustfmt_skip)]
         match self {
-            Command::Init     => panic!("Command::init does not handle HTTP requests"),
-            Command::Campaign => cmd.parse::<Campaign>()?.exec(args),
-            Command::Device   => cmd.parse::<Device>()?.exec(args),
-            Command::Group    => cmd.parse::<Group>()?.exec(args),
-            Command::Package  => cmd.parse::<Package>()?.exec(args),
-            Command::Update   => cmd.parse::<Update>()?.exec(args),
+            Command::Init     => Config::init_from_args(args),
+            Command::Campaign => cmd.parse::<Campaign>()?.exec(args, reply),
+            Command::Device   => cmd.parse::<Device>()?.exec(args, reply),
+            Command::Group    => cmd.parse::<Group>()?.exec(args, reply),
+            Command::Package  => cmd.parse::<Package>()?.exec(args, reply),
+            Command::Update   => cmd.parse::<Update>()?.exec(args, reply),
         }
     }
 }
@@ -72,18 +72,18 @@ pub enum Campaign {
     Cancel,
 }
 
-impl<'a> HttpRequest<'a> for Campaign {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
+impl<'a> Exec<'a> for Campaign {
+    fn exec(&self, args: &ArgMatches<'a>, reply: impl FnOnce(Response) -> Result<()>) -> Result<()> {
         let mut config = Config::load_default()?;
-        let campaign = || flags.value_of("campaign").expect("--campaign").parse();
+        let campaign = || args.value_of("campaign").expect("--campaign").parse();
 
         #[cfg_attr(rustfmt, rustfmt_skip)]
         match self {
-            Campaign::List   => Campaigner::list_from_flags(&mut config, flags),
-            Campaign::Create => Campaigner::create_from_flags(&mut config, flags),
+            Campaign::List   => Campaigner::list_from_args(&mut config, args),
+            Campaign::Create => Campaigner::create_from_args(&mut config, args),
             Campaign::Launch => Campaigner::launch_campaign(&mut config, campaign()?),
             Campaign::Cancel => Campaigner::cancel_campaign(&mut config, campaign()?),
-        }
+        }.and_then(reply)
     }
 }
 
@@ -111,19 +111,19 @@ pub enum Device {
     Delete,
 }
 
-impl<'a> HttpRequest<'a> for Device {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
+impl<'a> Exec<'a> for Device {
+    fn exec(&self, args: &ArgMatches<'a>, reply: impl FnOnce(Response) -> Result<()>) -> Result<()> {
         let mut config = Config::load_default()?;
-        let device = || flags.value_of("device").expect("--device").parse();
-        let name = || flags.value_of("name").expect("--name");
-        let id = || flags.value_of("id").expect("--id");
+        let device = || args.value_of("device").expect("--device").parse();
+        let name = || args.value_of("name").expect("--name");
+        let id = || args.value_of("id").expect("--id");
 
         #[cfg_attr(rustfmt, rustfmt_skip)]
         match self {
-            Device::List   => Registry::list_device_flags(&mut config, flags),
-            Device::Create => Registry::create_device(&mut config, name(), id(), DeviceType::from_flags(flags)?),
+            Device::List   => Registry::list_device_args(&mut config, args),
+            Device::Create => Registry::create_device(&mut config, name(), id(), DeviceType::from_args(args)?),
             Device::Delete => Registry::delete_device(&mut config, device()?),
-        }
+        }.and_then(reply)
     }
 }
 
@@ -152,21 +152,21 @@ pub enum Group {
     Remove,
 }
 
-impl<'a> HttpRequest<'a> for Group {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
+impl<'a> Exec<'a> for Group {
+    fn exec(&self, args: &ArgMatches<'a>, reply: impl FnOnce(Response) -> Result<()>) -> Result<()> {
         let mut config = Config::load_default()?;
-        let group = || flags.value_of("group").expect("--group").parse();
-        let device = || flags.value_of("device").expect("--device").parse();
-        let name = || flags.value_of("name").expect("--name");
+        let group = || args.value_of("group").expect("--group").parse();
+        let device = || args.value_of("device").expect("--device").parse();
+        let name = || args.value_of("name").expect("--name");
 
         #[cfg_attr(rustfmt, rustfmt_skip)]
         match self {
-            Group::List   => Registry::list_group_flags(&mut config, flags),
+            Group::List   => Registry::list_group_args(&mut config, args),
             Group::Create => Registry::create_group(&mut config, name()),
             Group::Add    => Registry::add_to_group(&mut config, group()?, device()?),
             Group::Remove => Registry::remove_from_group(&mut config, group()?, device()?),
             Group::Rename => Registry::rename_group(&mut config, group()?, name()),
-        }
+        }.and_then(reply)
     }
 }
 
@@ -196,20 +196,20 @@ pub enum Package {
     Upload,
 }
 
-impl<'a> HttpRequest<'a> for Package {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
+impl<'a> Exec<'a> for Package {
+    fn exec(&self, args: &ArgMatches<'a>, reply: impl FnOnce(Response) -> Result<()>) -> Result<()> {
         let mut config = Config::load_default()?;
-        let name = || flags.value_of("name").expect("--name");
-        let version = || flags.value_of("version").expect("--version");
-        let packages = || flags.value_of("packages").expect("--packages");
+        let name = || args.value_of("name").expect("--name");
+        let version = || args.value_of("version").expect("--version");
+        let packages = || args.value_of("packages").expect("--packages");
 
         #[cfg_attr(rustfmt, rustfmt_skip)]
         match self {
             Package::List   => panic!("API not yet supported"),
-            Package::Add    => Reposerver::add_package(&mut config, TufPackage::from_flags(flags)?),
+            Package::Add    => Reposerver::add_package(&mut config, TufPackage::from_args(args)?),
             Package::Fetch  => Reposerver::get_package(&mut config, name(), version()),
             Package::Upload => Reposerver::add_packages(&mut config, TufPackages::from(TargetPackages::from_file(packages())?)?),
-        }
+        }.and_then(reply)
     }
 }
 
@@ -236,17 +236,17 @@ pub enum Update {
     Launch,
 }
 
-impl<'a> HttpRequest<'a> for Update {
-    fn exec(&self, flags: &ArgMatches<'a>) -> Result<Response> {
+impl<'a> Exec<'a> for Update {
+    fn exec(&self, args: &ArgMatches<'a>, reply: impl FnOnce(Response) -> Result<()>) -> Result<()> {
         let mut config = Config::load_default()?;
-        let update = || flags.value_of("update").expect("--update").parse();
-        let device = || flags.value_of("device").expect("--device").parse();
-        let targets = || flags.value_of("targets").expect("--targets");
+        let update = || args.value_of("update").expect("--update").parse();
+        let device = || args.value_of("device").expect("--device").parse();
+        let targets = || args.value_of("targets").expect("--targets");
 
         match self {
             Update::Create => Director::create_mtu(&mut config, &TufUpdates::from(TargetRequests::from_file(targets())?)?),
             Update::Launch => Director::launch_mtu(&mut config, update()?, device()?),
-        }
+        }.and_then(reply)
     }
 }
 
