@@ -15,9 +15,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Conversion from app or lib errors to a single representation.
 pub enum Error {
+    Args(String),
     Auth(String),
     Command(String),
-    Flag(String),
     NotFound(String, Option<String>),
     Parse(String),
     Token(String),
@@ -35,9 +35,9 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         #[cfg_attr(rustfmt, rustfmt_skip)]
         let output = match self {
+            Error::Args(err)    => format!("Command args: {}", err),
             Error::Auth(err)    => format!("Authorization: {}", err),
             Error::Command(err) => format!("Command input: {}", err),
-            Error::Flag(err)    => format!("Command flags: {}", err),
             Error::NotFound(name, help) => match help {
                 Some(help) => format!("{} not found. {}", name, help),
                 None       => format!("{} not found.", name)

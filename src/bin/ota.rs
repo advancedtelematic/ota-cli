@@ -10,8 +10,7 @@ use log::LevelFilter;
 use std::io::Write;
 
 use ota::{
-    command::{Command, HttpRequest},
-    config::Config,
+    command::{Command, Exec},
     error::Result,
     http::Http,
 };
@@ -24,15 +23,10 @@ fn main() -> Result<()> {
         .filter(Some("tokio"), LevelFilter::Info)
         .init();
 
-    let (cmd, flags) = args.subcommand();
-    let command = cmd.parse::<Command>()?;
-    let flags = flags.expect("command flags");
-
-    if let Command::Init = command {
-        Config::init_from_flags(flags)
-    } else {
-        command.exec(flags).and_then(Http::print_response)
-    }
+    let (cmd, args) = args.subcommand();
+    let cmd = cmd.parse::<Command>()?;
+    let args = args.expect("cli args");
+    cmd.exec(args, Http::print_response)
 }
 
 fn parse_args<'a>() -> ArgMatches<'a> {
