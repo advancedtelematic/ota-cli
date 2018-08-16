@@ -31,16 +31,20 @@ pub enum Command {
 
 impl<'a> Exec<'a> for Command {
     fn exec(&self, args: &ArgMatches<'a>, reply: impl FnOnce(Response) -> Result<()>) -> Result<()> {
-        let (cmd, args) = args.subcommand();
-        let args = args.expect("sub-command args");
-        #[cfg_attr(rustfmt, rustfmt_skip)]
-        match self {
-            Command::Init     => Config::init_from_args(args),
-            Command::Campaign => cmd.parse::<Campaign>()?.exec(args, reply),
-            Command::Device   => cmd.parse::<Device>()?.exec(args, reply),
-            Command::Group    => cmd.parse::<Group>()?.exec(args, reply),
-            Command::Package  => cmd.parse::<Package>()?.exec(args, reply),
-            Command::Update   => cmd.parse::<Update>()?.exec(args, reply),
+        if let Command::Init = self {
+            Config::init_from_args(args)
+        } else {
+            let (cmd, args) = args.subcommand();
+            let args = args.expect("sub-command args");
+            #[cfg_attr(rustfmt, rustfmt_skip)]
+            match self {
+                Command::Campaign => cmd.parse::<Campaign>()?.exec(args, reply),
+                Command::Device   => cmd.parse::<Device>()?.exec(args, reply),
+                Command::Group    => cmd.parse::<Group>()?.exec(args, reply),
+                Command::Package  => cmd.parse::<Package>()?.exec(args, reply),
+                Command::Update   => cmd.parse::<Update>()?.exec(args, reply),
+                Command::Init     => unreachable!()
+            }
         }
     }
 }
