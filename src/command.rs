@@ -5,7 +5,7 @@ use std::str::FromStr;
 use api::{
     campaigner::{Campaigner, CampaignerApi},
     director::{Director, DirectorApi, TargetRequests, TufUpdates},
-    registry::{DeviceType, Registry, RegistryApi},
+    registry::{DeviceType, GroupType, Registry, RegistryApi},
     reposerver::{Reposerver, ReposerverApi, TargetPackages, TufPackage, TufPackages},
 };
 use config::Config;
@@ -166,7 +166,7 @@ impl<'a> Exec<'a> for Group {
         #[cfg_attr(rustfmt, rustfmt_skip)]
         match self {
             Group::List   => Registry::list_group_args(&mut config, args),
-            Group::Create => Registry::create_group(&mut config, name()),
+            Group::Create => Registry::create_group(&mut config, name(), GroupType::Static),
             Group::Add    => Registry::add_to_group(&mut config, group()?, device()?),
             Group::Remove => Registry::remove_from_group(&mut config, group()?, device()?),
             Group::Rename => Registry::rename_group(&mut config, group()?, name()),
