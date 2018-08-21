@@ -18,7 +18,7 @@ pub trait RegistryApi {
     fn list_device(&mut Config, device: Uuid) -> Result<Response>;
     fn list_all_devices(&mut Config) -> Result<Response>;
 
-    fn create_group(&mut Config, name: &str) -> Result<Response>;
+    fn create_group(&mut Config, name: &str, group_type: GroupType) -> Result<Response>;
     fn rename_group(&mut Config, group: Uuid, name: &str) -> Result<Response>;
     fn add_to_group(&mut Config, group: Uuid, device: Uuid) -> Result<Response>;
     fn remove_from_group(&mut Config, group: Uuid, device: Uuid) -> Result<Response>;
@@ -81,11 +81,11 @@ impl RegistryApi for Registry {
         Http::get(&format!("{}api/v1/devices", config.registry), config.token()?)
     }
 
-    fn create_group(config: &mut Config, name: &str) -> Result<Response> {
+    fn create_group(config: &mut Config, name: &str, group_type: GroupType) -> Result<Response> {
         debug!("creating device group {}", name);
         let req = Client::new()
             .post(&format!("{}api/v1/device_groups", config.registry))
-            .query(&[("groupName", name)])
+            .json(&json!({"name": name, "groupType": format!("{}", group_type)}))
             .build()?;
         Http::send(req, config.token()?)
     }
@@ -173,6 +173,38 @@ impl Display for DeviceType {
         let text = match self {
             DeviceType::Vehicle => "Vehicle",
             DeviceType::Other   => "Other",
+        };
+        write!(f, "{}", text)
+    }
+}
+
+
+/// Available group types.
+#[derive(Clone, Copy, Debug)]
+pub enum GroupType {
+    Static,
+    Dynamic,
+}
+
+impl FromStr for GroupType {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        #[cfg_attr(rustfmt, rustfmt_skip)]
+        match s.to_lowercase().as_ref() {
+            "static"  => Ok(GroupType::Static),
+            "dynamic" => Ok(GroupType::Dynamic),
+            _ => Err(Error::Parse(format!("unknown `GroupType`: {}", s))),
+        }
+    }
+}
+
+impl Display for GroupType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        #[cfg_attr(rustfmt, rustfmt_skip)]
+        let text = match self {
+            GroupType::Static  => "static",
+            GroupType::Dynamic => "dynamic",
         };
         write!(f, "{}", text)
     }
