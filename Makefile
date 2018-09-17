@@ -1,4 +1,4 @@
-IMAGE ?= advancedtelematic/rust:x86-1.26.2
+IMAGE ?= advancedtelematic/rust:x86-1.29.0
 TARGET ?= x86_64-unknown-linux-gnu
 
 .PHONY: help ota debug docker clean
