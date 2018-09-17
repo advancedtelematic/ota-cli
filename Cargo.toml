@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 clap = "2.31.2"
+dirs = "1.0.3"
 env_logger = "0.5.10"
 log = "0.4.2"
 reqwest = "0.8.6"

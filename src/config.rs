@@ -1,7 +1,7 @@
 use clap::ArgMatches;
+use dirs;
 use serde_json;
 use std::{
-    env,
     fs::{self, File, OpenOptions},
     io::{BufReader, ErrorKind, Read, Write},
     path::{Path, PathBuf},
@@ -78,8 +78,7 @@ impl<'a> Config {
             .or_else(|err| match err.kind() {
                 ErrorKind::NotFound => Err(Error::NotFound("Config file".into(), Some("Please run `ota init` first.".into()))),
                 _ => Err(err.into()),
-            })
-            .and_then(|file| Ok(serde_json::from_slice(&file)?))
+            }).and_then(|file| Ok(serde_json::from_slice(&file)?))
     }
 
     /// Parse `Credentials` or return an existing reference.
@@ -105,7 +104,7 @@ impl<'a> Config {
     /// Return the default config path.
     fn default_path() -> PathBuf {
         let mut path = PathBuf::new();
-        path.push(env::home_dir().expect("couldn't read home directory path"));
+        path.push(dirs::home_dir().expect("couldn't read home directory path"));
         path.push(CONFIG_FILE);
         path
     }
