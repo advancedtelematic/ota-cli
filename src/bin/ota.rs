@@ -1,13 +1,11 @@
 #[macro_use]
 extern crate clap;
-extern crate env_logger;
 extern crate log;
 extern crate ota;
+extern crate pretty_env_logger;
 
 use clap::{AppSettings, ArgMatches};
-use env_logger::Builder;
 use log::LevelFilter;
-use std::io::Write;
 
 use ota::{
     command::{Command, Exec},
@@ -17,10 +15,10 @@ use ota::{
 
 fn main() -> Result<()> {
     let args = parse_args();
-    Builder::from_default_env()
-        .format(|buf, record| writeln!(buf, "{}: {}", record.level(), record.args()))
-        .parse(args.value_of("level").unwrap_or("INFO"))
+    pretty_env_logger::formatted_builder()
+        .filter(None, LevelFilter::max())
         .filter(Some("tokio"), LevelFilter::Info)
+        .parse(args.value_of("level").unwrap_or("info"))
         .init();
 
     let (cmd, args) = args.subcommand();
@@ -247,5 +245,6 @@ fn parse_args<'a>() -> ArgMatches<'a> {
           (@arg device: -d --device <uuid> "Apply to this device")
         )
       )
-    ).get_matches()
+    )
+    .get_matches()
 }

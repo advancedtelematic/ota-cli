@@ -52,22 +52,22 @@ impl CampaignerApi for Campaigner {
         debug!("creating campaign {} with update {} for groups: {:?}", name, update, groups);
         let req = Client::new()
             .post(&format!("{}api/v2/campaigns", config.campaigner))
-            .json(&json!({"update": format!("{}", update), "name": name, "groups": groups}))
-            .build()?;
+            .json(&json!({"update": format!("{}", update), "name": name, "groups": groups}));
         Http::send(req, config.token()?)
     }
 
     fn launch_campaign(config: &mut Config, campaign: Uuid) -> Result<Response> {
         debug!("launching campaign {}", campaign);
-        let req = Client::new()
-            .post(&format!("{}api/v2/campaigns/{}/launch", config.campaigner, campaign))
-            .build()?;
+        let req = Client::new().post(&format!("{}api/v2/campaigns/{}/launch", config.campaigner, campaign));
         Http::send(req, config.token()?)
     }
 
     fn cancel_campaign(config: &mut Config, campaign: Uuid) -> Result<Response> {
         debug!("cancelling campaign {}", campaign);
-        Http::post(&format!("{}api/v2/campaigns/{}/cancel", config.campaigner, campaign), config.token()?)
+        Http::post(
+            &format!("{}api/v2/campaigns/{}/cancel", config.campaigner, campaign),
+            config.token()?,
+        )
     }
 
     fn list_campaign_info(config: &mut Config, campaign: Uuid) -> Result<Response> {
@@ -77,7 +77,10 @@ impl CampaignerApi for Campaigner {
 
     fn list_campaign_stats(config: &mut Config, campaign: Uuid) -> Result<Response> {
         debug!("getting stats for campaign {}", campaign);
-        Http::get(&format!("{}api/v2/campaigns/{}/stats", config.campaigner, campaign), config.token()?)
+        Http::get(
+            &format!("{}api/v2/campaigns/{}/stats", config.campaigner, campaign),
+            config.token()?,
+        )
     }
 
     fn list_all_campaigns(config: &mut Config) -> Result<Response> {

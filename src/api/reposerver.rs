@@ -36,8 +36,7 @@ impl ReposerverApi for Reposerver {
             .multipart(match package.target {
                 RepoTarget::Path(path) => Form::new().file("file", path)?,
                 RepoTarget::Url(url) => Form::new().file("fileUri", url.as_str())?,
-            })
-            .build()?;
+            });
         Http::send(req, config.token()?)
     }
 

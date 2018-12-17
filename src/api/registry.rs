@@ -59,10 +59,11 @@ impl<'a> Registry {
 impl RegistryApi for Registry {
     fn create_device(config: &mut Config, name: &str, id: &str, kind: DeviceType) -> Result<Response> {
         debug!("creating device {} of type {} with id {}", name, kind, id);
-        let req = Client::new()
-            .post(&format!("{}api/v1/devices", config.registry))
-            .query(&[("deviceName", name), ("deviceId", id), ("deviceType", &format!("{}", kind))])
-            .build()?;
+        let req = Client::new().post(&format!("{}api/v1/devices", config.registry)).query(&[
+            ("deviceName", name),
+            ("deviceId", id),
+            ("deviceType", &format!("{}", kind)),
+        ]);
         Http::send(req, config.token()?)
     }
 
@@ -85,8 +86,7 @@ impl RegistryApi for Registry {
         debug!("creating device group {}", name);
         let req = Client::new()
             .post(&format!("{}api/v1/device_groups", config.registry))
-            .json(&json!({"name": name, "groupType": format!("{}", group_type)}))
-            .build()?;
+            .json(&json!({"name": name, "groupType": format!("{}", group_type)}));
         Http::send(req, config.token()?)
     }
 
@@ -94,8 +94,7 @@ impl RegistryApi for Registry {
         debug!("renaming group {} to {}", group, name);
         let req = Client::new()
             .put(&format!("{}api/v1/device_groups/{}/rename", config.registry, group))
-            .query(&[("groupId", &format!("{}", group), ("groupName", name))])
-            .build()?;
+            .query(&[("groupId", &format!("{}", group), ("groupName", name))]);
         Http::send(req, config.token()?)
     }
 
@@ -103,8 +102,7 @@ impl RegistryApi for Registry {
         debug!("adding device {} to group {}", device, group);
         let req = Client::new()
             .post(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, group, device))
-            .query(&[("deviceId", device), ("groupId", group)])
-            .build()?;
+            .query(&[("deviceId", device), ("groupId", group)]);
         Http::send(req, config.token()?)
     }
 
@@ -112,14 +110,16 @@ impl RegistryApi for Registry {
         debug!("removing device {} from group {}", device, group);
         let req = Client::new()
             .delete(&format!("{}api/v1/device_groups/{}/devices/{}", config.registry, group, device))
-            .query(&[("deviceId", format!("{}", device)), ("groupId", format!("{}", group))])
-            .build()?;
+            .query(&[("deviceId", format!("{}", device)), ("groupId", format!("{}", group))]);
         Http::send(req, config.token()?)
     }
 
     fn list_devices(config: &mut Config, group: Uuid) -> Result<Response> {
         debug!("listing devices in group {}", group);
-        Http::get(&format!("{}api/v1/device_groups/{}/devices", config.registry, group), config.token()?)
+        Http::get(
+            &format!("{}api/v1/device_groups/{}/devices", config.registry, group),
+            config.token()?,
+        )
     }
 
     fn list_groups(config: &mut Config, device: Uuid) -> Result<Response> {
@@ -214,7 +214,15 @@ impl Display for GroupType {
 /// Parse into a tuple of --all, --device, and --group arg values.
 fn parse_list_args<'a>(args: &ArgMatches<'a>) -> Result<(bool, Option<Uuid>, Option<Uuid>)> {
     let all = args.is_present("all");
-    let device = if let Some(val) = args.value_of("device") { Some(val.parse()?) } else { None };
-    let group = if let Some(val) = args.value_of("group") { Some(val.parse()?) } else { None };
+    let device = if let Some(val) = args.value_of("device") {
+        Some(val.parse()?)
+    } else {
+        None
+    };
+    let group = if let Some(val) = args.value_of("group") {
+        Some(val.parse()?)
+    } else {
+        None
+    };
     Ok((all, device, group))
 }
