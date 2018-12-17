@@ -34,8 +34,7 @@ impl DirectorApi for Director {
         debug!("creating multi-target update: {:?}", updates);
         let req = Client::new()
             .post(&format!("{}api/v1/multi_target_updates", config.director))
-            .json(updates)
-            .build()?;
+            .json(updates);
         Http::send(req, config.token()?)
     }
 
@@ -263,7 +262,10 @@ mod tests {
                 panic!("missing `from` section")
             }
             assert_eq!(req.to.target, "somefile_1.0.2");
-            assert_eq!(req.to.checksum.hash, "abcd012345678901234567890123456789012345678901234567890123456789");
+            assert_eq!(
+                req.to.checksum.hash,
+                "abcd012345678901234567890123456789012345678901234567890123456789"
+            );
             assert_eq!(req.to.checksum.method, ChecksumMethod::Sha256);
         } else {
             panic!("some-ecu-type not found");
@@ -273,8 +275,14 @@ mod tests {
             assert_eq!(req.format, TargetFormat::Ostree);
             assert_eq!(req.generate_diff, false);
             assert!(req.from.is_none());
-            assert_eq!(req.to.target, "my-branch_012345678901234567890123456789012345678901234567890123456789abcd");
-            assert_eq!(req.to.checksum.hash, "012345678901234567890123456789012345678901234567890123456789abcd");
+            assert_eq!(
+                req.to.target,
+                "my-branch_012345678901234567890123456789012345678901234567890123456789abcd"
+            );
+            assert_eq!(
+                req.to.checksum.hash,
+                "012345678901234567890123456789012345678901234567890123456789abcd"
+            );
             assert_eq!(req.to.checksum.method, ChecksumMethod::Sha256);
         } else {
             panic!("another-ecu-type not found");

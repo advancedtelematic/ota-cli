@@ -250,7 +250,8 @@ impl<'a> Exec<'a> for Update {
         match self {
             Update::Create => Director::create_mtu(&mut config, &TufUpdates::from(TargetRequests::from_file(targets())?)?),
             Update::Launch => Director::launch_mtu(&mut config, update()?, device()?),
-        }.and_then(reply)
+        }
+        .and_then(reply)
     }
 }
 

@@ -27,7 +27,7 @@ pub enum Error {
     Json(serde_json::Error),
     Toml(toml::de::Error),
     Url(url::ParseError),
-    Uuid(uuid::ParseError),
+    Uuid(uuid::parser::ParseError),
     Zip(zip::result::ZipError),
 }
 
@@ -85,8 +85,8 @@ impl From<url::ParseError> for Error {
     fn from(err: url::ParseError) -> Self { Error::Url(err) }
 }
 
-impl From<uuid::ParseError> for Error {
-    fn from(err: uuid::ParseError) -> Self { Error::Uuid(err) }
+impl From<uuid::parser::ParseError> for Error {
+    fn from(err: uuid::parser::ParseError) -> Self { Error::Uuid(err) }
 }
 
 impl From<zip::result::ZipError> for Error {

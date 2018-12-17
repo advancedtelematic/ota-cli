@@ -1,4 +1,4 @@
-use reqwest::{header::ContentType, Client};
+use reqwest::Client;
 use serde_json;
 use std::{fs::File, io::BufReader, path::Path};
 use url::Url;
@@ -25,9 +25,7 @@ impl AuthPlusApi for AuthPlus {
             let req = Client::new()
                 .post(&format!("{}/token", oauth2.server))
                 .basic_auth(oauth2.client_id, Some(oauth2.client_secret))
-                .header(ContentType::form_url_encoded())
-                .body("grant_type=client_credentials")
-                .build()?;
+                .form(&[("grant_type", "client_credentials")]);
             Ok(Some(Http::send(req, None)?.json()?))
         } else {
             debug!("skipping oauth2 authentication...");

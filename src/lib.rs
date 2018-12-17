@@ -1,8 +1,8 @@
 extern crate clap;
 extern crate dirs;
-extern crate env_logger;
 #[macro_use]
 extern crate log;
+extern crate pretty_env_logger;
 extern crate reqwest;
 extern crate serde;
 #[macro_use]

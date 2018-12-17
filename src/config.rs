@@ -57,7 +57,8 @@ impl<'a> Config {
             director,
             registry,
             reposerver,
-        }.save_default()
+        }
+        .save_default()
     }
 
     /// Save the default config file.
@@ -78,7 +79,8 @@ impl<'a> Config {
             .or_else(|err| match err.kind() {
                 ErrorKind::NotFound => Err(Error::NotFound("Config file".into(), Some("Please run `ota init` first.".into()))),
                 _ => Err(err.into()),
-            }).and_then(|file| Ok(serde_json::from_slice(&file)?))
+            })
+            .and_then(|file| Ok(serde_json::from_slice(&file)?))
     }
 
     /// Parse `Credentials` or return an existing reference.
@@ -93,10 +95,12 @@ impl<'a> Config {
     pub fn token(&mut self) -> Result<Option<AccessToken>> {
         match self.token {
             Some(_) => debug!("using cached access token..."),
-            None => if let Some(token) = AuthPlus::refresh_token(self)? {
-                self.token = Some(token);
-                self.save_default()?;
-            },
+            None => {
+                if let Some(token) = AuthPlus::refresh_token(self)? {
+                    self.token = Some(token);
+                    self.save_default()?;
+                }
+            }
         }
         Ok(self.token.clone())
     }
