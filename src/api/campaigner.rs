@@ -13,6 +13,9 @@ pub trait CampaignerApi {
     fn launch_campaign(&mut Config, campaign: Uuid) -> Result<Response>;
     fn cancel_campaign(&mut Config, campaign: Uuid) -> Result<Response>;
 
+    fn list_updates(&mut Config) -> Result<Response>;
+    fn create_update(&mut Config, update: Uuid, name: &str, description: &str) -> Result<Response>;
+
     fn list_campaign_info(&mut Config, campaign: Uuid) -> Result<Response>;
     fn list_campaign_stats(&mut Config, campaign: Uuid) -> Result<Response>;
     fn list_all_campaigns(&mut Config) -> Result<Response>;
@@ -68,6 +71,21 @@ impl CampaignerApi for Campaigner {
             &format!("{}api/v2/campaigns/{}/cancel", config.campaigner, campaign),
             config.token()?,
         )
+    }
+
+    fn list_updates(config: &mut Config) -> Result<Response> {
+        debug!("getting list of campaigner updates ");
+        Http::get(&format!("{}api/v2/updates", config.campaigner), config.token()?)
+    }
+
+    fn create_update(config: &mut Config, update: Uuid, name: &str, description: &str) -> Result<Response> {
+        debug!("creating update ");
+
+        let req = Client::new()
+            .post(&format!("{}api/v2/updates", config.campaigner))
+            .json(&json!({"name": name, "description": description, "updateSource": {"id": format!("{}", update), "sourceType": "multi_target" }} ));
+
+        Http::send(req, config.token()?)
     }
 
     fn list_campaign_info(config: &mut Config, campaign: Uuid) -> Result<Response> {

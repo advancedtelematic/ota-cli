@@ -49,6 +49,30 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         (@arg registry: -r --registry <url> "Device Registry URL")
       )
 
+
+      (@subcommand campaignUpdates =>
+        (about: "Manage OTA campaigner updates")
+        (setting: AppSettings::SubcommandRequiredElseHelp)
+        (setting: AppSettings::DeriveDisplayOrder)
+        (setting: AppSettings::InferSubcommands)
+        (setting: AppSettings::UnifiedHelpMessage)
+
+       (@subcommand list =>
+          (about: "List campaign updates")
+          (setting: AppSettings::UnifiedHelpMessage)
+       )
+
+       (@subcommand create =>
+        (about: "create a campaign update")
+        (setting: AppSettings::UnifiedHelpMessage)
+        (setting: AppSettings::ArgRequiredElseHelp)
+        
+        (@arg update: -u --update <uuid> "Multi-target update id")
+        (@arg name: -n --name <name> "update name")
+        (@arg description: -d --description <description> "The update description")
+       )
+      )
+
       (@subcommand campaign =>
         (about: "Manage OTA campaigns")
         (setting: AppSettings::SubcommandRequiredElseHelp)

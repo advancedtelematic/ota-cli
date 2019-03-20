@@ -27,6 +27,7 @@ pub enum Command {
     Group,
     Package,
     Update,
+    CampaignUpdate,
 }
 
 impl<'a> Exec<'a> for Command {
@@ -43,6 +44,7 @@ impl<'a> Exec<'a> for Command {
                 Command::Group    => cmd.parse::<Group>()?.exec(args, reply),
                 Command::Package  => cmd.parse::<Package>()?.exec(args, reply),
                 Command::Update   => cmd.parse::<Update>()?.exec(args, reply),
+                Command::CampaignUpdate   => cmd.parse::<CampaignUpdate>()?.exec(args, reply),
                 Command::Init     => unreachable!()
             }
         }
@@ -57,11 +59,12 @@ impl FromStr for Command {
         match s.to_lowercase().as_ref() {
             "init"     => Ok(Command::Init),
             "campaign" => Ok(Command::Campaign),
+            "campaignupdates" => Ok(Command::CampaignUpdate),
             "device"   => Ok(Command::Device),
             "group"    => Ok(Command::Group),
             "package"  => Ok(Command::Package),
             "update"   => Ok(Command::Update),
-            _ => Err(Error::Command(format!("unknown command: {}", s))),
+            _ => Err(Error::Command(format!("unknown command: >>{}<<", s))),
         }
     }
 }
@@ -74,6 +77,11 @@ pub enum Campaign {
     Create,
     Launch,
     Cancel,
+}
+
+pub enum CampaignUpdate {
+    List,
+    Create,
 }
 
 impl<'a> Exec<'a> for Campaign {
@@ -103,6 +111,34 @@ impl FromStr for Campaign {
             "cancel" => Ok(Campaign::Cancel),
             _ => Err(Error::Command(format!("unknown campaign subcommand: {}", s))),
         }
+    }
+}
+
+impl FromStr for CampaignUpdate {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        #[cfg_attr(rustfmt, rustfmt_skip)]
+        match s.to_lowercase().as_ref() {
+            "list" => Ok(CampaignUpdate::List),
+            "create" => Ok(CampaignUpdate::Create),
+            _ => Err(Error::Command(format!("unknown campaign subcommand: {}", s))),
+        }
+    }
+}
+
+impl<'a> Exec<'a> for CampaignUpdate {
+    fn exec(&self, args: &ArgMatches<'a>, reply: impl FnOnce(Response) -> Result<()>) -> Result<()> {
+        let mut config = Config::load_default()?;
+        let update = || args.value_of("update").expect("--update").parse();
+        let name = || args.value_of("name").expect("--name");
+        let description = || args.value_of("description").expect("--description");
+
+        #[cfg_attr(rustfmt, rustfmt_skip)]
+        match self {
+            CampaignUpdate::List  => Campaigner::list_updates(&mut config),
+            CampaignUpdate::Create  => Campaigner::create_update(&mut config, update()?, name(), description())
+        }.and_then(reply)
     }
 }
 
@@ -237,7 +273,7 @@ impl FromStr for Package {
 #[derive(Serialize, Deserialize, PartialEq, Clone, Copy, Debug)]
 pub enum Update {
     Create,
-    Launch,
+    Launch
 }
 
 impl<'a> Exec<'a> for Update {
