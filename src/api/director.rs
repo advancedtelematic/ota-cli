@@ -145,7 +145,7 @@ impl TufUpdates {
             Err(Error::Parse("binary target length cannot be 0".into()))?
         }
         Ok(TufTarget {
-            target: format!("{}_{}", target.name, target.version),
+            target: format!("{}-{}", target.name, target.version),
             length,
             checksum: Checksum {
                 method: target.method.unwrap_or(ChecksumMethod::Sha256),
@@ -257,11 +257,11 @@ mod tests {
             assert_eq!(req.format, TargetFormat::Binary);
             assert_eq!(req.generate_diff, true);
             if let Some(ref from) = req.from {
-                assert_eq!(from.target, "somefile_1.0.1");
+                assert_eq!(from.target, "somefile-1.0.1");
             } else {
                 panic!("missing `from` section")
             }
-            assert_eq!(req.to.target, "somefile_1.0.2");
+            assert_eq!(req.to.target, "somefile-1.0.2");
             assert_eq!(
                 req.to.checksum.hash,
                 "abcd012345678901234567890123456789012345678901234567890123456789"
@@ -277,7 +277,7 @@ mod tests {
             assert!(req.from.is_none());
             assert_eq!(
                 req.to.target,
-                "my-branch_012345678901234567890123456789012345678901234567890123456789abcd"
+                "my-branch-012345678901234567890123456789012345678901234567890123456789abcd"
             );
             assert_eq!(
                 req.to.checksum.hash,
