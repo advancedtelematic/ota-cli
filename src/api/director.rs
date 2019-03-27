@@ -59,6 +59,7 @@ pub struct TargetObject {
     pub length:  Option<u64>,
     pub hash:    Option<String>,
     pub method:  Option<ChecksumMethod>,
+    pub uri: Option<String>
 }
 
 /// A request to update some hardware type to a new `TargetObject`.
@@ -67,7 +68,7 @@ pub struct TargetRequest {
     pub target_format: Option<TargetFormat>,
     pub from:          Option<TargetObject>,
     pub to:            TargetObject,
-    pub generate_diff: Option<bool>,
+    pub generate_diff: Option<bool>
 }
 
 /// Parsed mapping from hardware identifiers to target requests.
@@ -95,7 +96,7 @@ pub struct TufUpdate {
     pub from: Option<TufTarget>,
     pub to: TufTarget,
     #[serde(rename = "generateDiff")]
-    pub generate_diff: bool,
+    pub generate_diff: bool
 }
 
 /// A TUF target for an ECU.
@@ -105,6 +106,7 @@ pub struct TufTarget {
     #[serde(rename = "targetLength")]
     pub length: u64,
     pub checksum: Checksum,
+    pub uri: Option<String>
 }
 
 /// An update request for each `EcuSerial` to a `TufUpdate` target.
@@ -135,7 +137,7 @@ impl TufUpdates {
             } else {
                 None
             },
-            to: Self::to_target(format, request.to)?,
+            to: Self::to_target(format, request.to)?
         })
     }
 
@@ -151,6 +153,7 @@ impl TufUpdates {
                 method: target.method.unwrap_or(ChecksumMethod::Sha256),
                 hash:   target.hash.unwrap_or(target.version),
             },
+            uri: target.uri
         })
     }
 }
