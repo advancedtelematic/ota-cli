@@ -23,6 +23,15 @@ You can also build a binary using Docker (for an linux target by default). Runni
 
 You can now move this binary into your path or remember to substitute subsequent `ota` commands with `./ota` to run it from this directory.
 
+### Mac support
+
+You can install OTA CLI on MacOS using [homebrew](https://brew.sh):
+
+```
+brew tap advancedtelematic/otaconnect
+brew install ota
+```
+
 ## Usage
 
 Run `ota` without any arguments to print usage output:
