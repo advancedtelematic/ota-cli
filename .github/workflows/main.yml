@@ -1,0 +1,41 @@
+name: Build macOS homebrew bottle for ota-cli release page
+on: 
+  release:
+    types: [created]
+jobs:
+  macOS:
+    name: Build macOS homebrew bottle for ota-cli release page
+    runs-on: macOS-10.14
+    steps:
+    - name: Attempt to auto-update recipe and build bottle
+      run: |
+        curl -O https://raw.githubusercontent.com/advancedtelematic/homebrew-otaconnect/master/ota.rb
+        VERSION=$(basename $GITHUB_REF)
+        RELEASE_URL="https://github.com/advancedtelematic/ota-cli/releases/download/${VERSION}/"
+        sed -i '' -E "s/  version \"[0-9]+.[0-9]+.[0-9]+\"/  version \"${VERSION}\"/" ota.rb
+        brew install --build-bottle ./ota.rb
+        brew bottle --json --no-rebuild --force-core-tap --root-url=${RELEASE_URL} ota
+        brew bottle --merge --write --no-commit ./ota--${VERSION}.mojave.bottle.json
+        rm ota.rb
+        echo "Bottle and recipe creation succeeded!"
+        echo "You should now open a PR at https://github.com/advancedtelematic/homebrew/otaconnect"
+        echo "Here's the new recipe. It's also attached to this job as an artifact."
+        echo "------------------------------------------------------------------------------------"
+        brew cat ota | tee ota.rb
+        echo "------------------------------------------------------------------------------------"
+        mv ota--${VERSION}.mojave.bottle.tar.gz ota-${VERSION}.mojave.bottle.tar.gz
+    - name: Upload bottle to github release page
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        VERSION=$(basename $GITHUB_REF)
+        RELEASE_ID=$(jq --raw-output '.release.id' $GITHUB_EVENT_PATH)
+        AUTH_HEADER="Authorization: token ${GITHUB_TOKEN}"
+        FILENAME=ota-${VERSION}.mojave.bottle.tar.gz
+        UPLOAD_URL="https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${FILENAME}"
+        curl -sSL -H "${AUTH_HEADER}" -F "data=@${FILENAME}" "$UPLOAD_URL"
+    - name: Save recipe as build artifact
+      uses: actions/upload-artifact@master
+      with:
+        name: ota.rb
+        path: ota.rb
